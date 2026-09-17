@@ -207,7 +207,7 @@ export default function Home() {
         <>
           <div className="msgs">
             {msgs.map((m) => (
-              <div key={m.id} className={m.author === nome ? "eu" : "ela"}>
+              <div key={m.id} className={m.author === nome ? "msg eu" : "msg ela"}>
                 {m.content}
               </div>
             ))}
