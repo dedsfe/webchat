@@ -24,10 +24,19 @@ export default function Home() {
   const fim = useRef<HTMLDivElement>(null);
   const sb = useRef<SupabaseClient | null>(null);
 
-  // se a URL já tem sala (?r=abc123), entra direto
+  // se a URL tem sala (?r=abc123) entra direto e memoriza; senão volta pra sala memorizada
   useEffect(() => {
     const r = new URLSearchParams(window.location.search).get("r");
-    if (r) setSala(r);
+    if (r) {
+      setSala(r);
+      localStorage.setItem("minha-sala", r);
+    } else {
+      const salva = localStorage.getItem("minha-sala");
+      if (salva) {
+        window.history.replaceState(null, "", `?r=${salva}`);
+        setSala(salva);
+      }
+    }
     setNome(localStorage.getItem("meu-nome"));
   }, []);
 
@@ -86,6 +95,7 @@ export default function Home() {
   function entrarNaCriada() {
     if (!salaCriada) return;
     window.history.replaceState(null, "", `?r=${salaCriada}`);
+    localStorage.setItem("minha-sala", salaCriada);
     setSala(salaCriada);
   }
 
@@ -93,7 +103,15 @@ export default function Home() {
     const limpo = codigo.trim();
     if (!limpo) return;
     window.history.replaceState(null, "", `?r=${limpo}`);
+    localStorage.setItem("minha-sala", limpo);
     setSala(limpo);
+  }
+
+  function sairDaSala() {
+    if (!window.confirm("sair da sala?")) return;
+    localStorage.removeItem("minha-sala");
+    localStorage.removeItem("meu-nome");
+    window.location.replace("/");
   }
 
   async function copiarLink() {
@@ -114,34 +132,6 @@ export default function Home() {
       setMsgs((atuais) => atuais.filter((m) => m.id !== idTemp));
       alert("não deu pra enviar: " + error.message);
     }
-  }
-
-  function aplicarLargura(px: number) {
-    const bloco = document.getElementById("bloco");
-    if (!bloco) return;
-    const w = Math.min(window.innerWidth, Math.max(Math.max(280, window.innerWidth * 0.25), px));
-    bloco.style.setProperty("--w", w + "px");
-    bloco.classList.toggle("cheio", w >= window.innerWidth - 2);
-  }
-
-  function comecarArrasto(e: React.PointerEvent, lado: "esq" | "dir") {
-    e.preventDefault();
-    const alvo = e.currentTarget as HTMLElement;
-    const bloco = document.getElementById("bloco")!;
-    const comecoW = bloco.getBoundingClientRect().width;
-    const startX = e.clientX;
-    alvo.classList.add("on");
-    const mover = (ev: PointerEvent) => {
-      const dx = ev.clientX - startX;
-      aplicarLargura(lado === "dir" ? comecoW + dx * 2 : comecoW - dx * 2);
-    };
-    const soltar = () => {
-      alvo.classList.remove("on");
-      window.removeEventListener("pointermove", mover);
-      window.removeEventListener("pointerup", soltar);
-    };
-    window.addEventListener("pointermove", mover);
-    window.addEventListener("pointerup", soltar);
   }
 
   if (!sala) {
@@ -186,10 +176,9 @@ export default function Home() {
   }
 
   return (
-    <div className="bloco" id="bloco" ref={(el) => { if (el) aplicarLargura(860); }}>
-      <div className="handle esq" onPointerDown={(e) => comecarArrasto(e, "esq")} title="arraste pra redimensionar" />
-      <div className="handle dir" onPointerDown={(e) => comecarArrasto(e, "dir")} title="arraste pra redimensionar" />
+    <div className="bloco">
       <div className="topo" />
+      <button className="sair" onClick={sairDaSala}>sair</button>
 
       {nome === null || !sala ? (
         <div className="pedir-nome">
