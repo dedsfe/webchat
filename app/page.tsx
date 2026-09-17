@@ -64,7 +64,11 @@ export default function Home() {
         (payload) =>
           setMsgs((atuais) => {
             const nova = payload.new as Msg;
-            return atuais.some((m) => m.id === nova.id) ? atuais : [...atuais, nova];
+            // troca a cópia otimista (tmp) pela real do banco
+            const semTmp = atuais.filter(
+              (m) => !(m.id.startsWith("tmp-") && m.author === nova.author && m.content === nova.content)
+            );
+            return semTmp.some((m) => m.id === nova.id) ? semTmp : [...semTmp, nova];
           })
       )
       .subscribe();
