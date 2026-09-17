@@ -1,0 +1,230 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, "SF Pro Text", Inter, system-ui, sans-serif;
+  background: #F2F2F5;
+  min-height: 100vh;
+}
+
+.bloco {
+  width: var(--w, 860px);
+  max-width: 100vw;
+  height: 100vh;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0 auto;
+  position: relative;
+}
+@media (min-width: 700px) {
+  .bloco.cheio { border-radius: 0; }
+  .bloco:not(.cheio) {
+    height: calc(100vh - 48px);
+    margin: 24px auto;
+    border-radius: 28px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.06);
+  }
+}
+
+/* alça de arrastar nas bordas */
+.handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+  z-index: 2;
+}
+.handle::before {
+  content: "";
+  width: 3px;
+  height: 100%;
+  border-radius: 3px;
+  background: #E0E3E8;
+}
+.handle:hover::before, .handle.on::before { background: #2F80ED; }
+.handle.esq { left: -9px; }
+.handle.dir { right: -9px; }
+.bloco.cheio .handle.esq { left: 0; }
+.bloco.cheio .handle.dir { right: 0; }
+
+/* degradê borrado no topo */
+.topo {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 56px;
+  z-index: 1;
+  pointer-events: none;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  -webkit-mask-image: linear-gradient(#000, transparent);
+  mask-image: linear-gradient(#000, transparent);
+}
+
+/* mensagens */
+.msgs {
+  flex: 1;
+  overflow-y: auto;
+  padding: 36px 20px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.msg {
+  max-width: 68%;
+  padding: 12px 18px;
+  border-radius: 22px;
+  font-size: 16px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.eu {
+  align-self: flex-end;
+  background: #E9F4FD;
+  color: #2F80ED;
+  border-bottom-right-radius: 8px;
+}
+
+.ela {
+  align-self: flex-start;
+  background: #F2F3F5;
+  color: #1F2937;
+  border-bottom-left-radius: 8px;
+}
+
+/* input */
+.input-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px 26px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+}
+.campo {
+  flex: 1;
+  background: #F2F3F5;
+  border: none;
+  border-radius: 999px;
+  padding: 13px 18px;
+  color: #1F2937;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+}
+.campo::placeholder { color: #A3A9B3; }
+.enviar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: none;
+  background: #2F80ED;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.enviar:disabled { background: #C9DFF6; cursor: default; }
+.enviar svg { display: block; }
+
+/* primeira visita: pedir o nome */
+.pedir-nome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 20px;
+}
+.pedir-nome p { color: #A3A9B3; font-size: 15px; font-weight: 600; }
+
+/* pré-entrada: criar ou entrar numa sala */
+.entrada-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.entrada {
+  width: 100%;
+  max-width: 420px;
+  background: #FFFFFF;
+  border-radius: 28px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.06);
+  padding: 40px 32px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  text-align: center;
+}
+.entrada h1 {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1F2937;
+}
+.entrada .sub {
+  font-size: 14px;
+  font-weight: 600;
+  color: #A3A9B3;
+  margin-top: -10px;
+}
+.btn-grande {
+  border: none;
+  border-radius: 999px;
+  padding: 15px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+}
+.btn-azul { background: #2F80ED; color: #FFFFFF; }
+.btn-azul:disabled { background: #C9DFF6; cursor: default; }
+.btn-cinza { background: #F2F3F5; color: #1F2937; }
+.divisor {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #C3C8CF;
+  font-size: 12px;
+  font-weight: 600;
+}
+.divisor::before, .divisor::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #F2F3F5;
+}
+.entrar-codigo {
+  display: flex;
+  gap: 10px;
+}
+.entrar-codigo .campo { flex: 1; }
+.link-pronto {
+  background: #F2F3F5;
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.link-pronto code {
+  font-size: 13px;
+  color: #2F80ED;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.copiado { color: #2F80ED; font-size: 13px; font-weight: 700; }
