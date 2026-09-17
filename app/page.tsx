@@ -52,7 +52,11 @@ export default function Home() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages_chat", filter: `room=eq.${sala}` },
-        (payload) => setMsgs((atuais) => [...atuais, payload.new as Msg])
+        (payload) =>
+          setMsgs((atuais) => {
+            const nova = payload.new as Msg;
+            return atuais.some((m) => m.id === nova.id) ? atuais : [...atuais, nova];
+          })
       )
       .subscribe();
 
@@ -102,7 +106,14 @@ export default function Home() {
     const conteudo = texto.trim();
     if (!conteudo || !sala || !nome || !sb.current) return;
     setTexto("");
-    await sb.current.from("messages_chat").insert({ room: sala, author: nome, content: conteudo });
+    // mostra na hora; o echo do realtime é ignorado pelo dedup de id
+    const idTemp = "tmp-" + crypto.randomUUID();
+    setMsgs((atuais) => [...atuais, { id: idTemp, author: nome, content: conteudo, created_at: new Date().toISOString() }]);
+    const { error } = await sb.current.from("messages_chat").insert({ room: sala, author: nome, content: conteudo });
+    if (error) {
+      setMsgs((atuais) => atuais.filter((m) => m.id !== idTemp));
+      alert("não deu pra enviar: " + error.message);
+    }
   }
 
   function aplicarLargura(px: number) {
