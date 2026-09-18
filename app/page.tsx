@@ -1269,7 +1269,18 @@ export default function Home() {
     if (!window.confirm("sair da sala?")) return;
     localStorage.removeItem("minha-sala");
     localStorage.removeItem("meu-nome");
-    window.location.replace("/");
+    // limpa o ?r= da URL antes de qualquer coisa: se ele ficar, o reload
+    // reentra na mesma sala e parece que o "sair" não funcionou
+    window.history.replaceState(null, "", window.location.pathname);
+    // sai por estado (funciona mesmo em PWA/standalone, sem depender de reload)
+    try {
+      canalRef.current?.unsubscribe();
+    } catch {}
+    canalRef.current = null;
+    setSala(null);
+    setNome(null);
+    setSalaCriada(null);
+    setCodigo("");
   }
 
   async function copiarLink() {
