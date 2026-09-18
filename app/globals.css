@@ -56,10 +56,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
 }
 
 .msg {
-  max-width: 68%;
+  max-width: 100%;
   padding: 12px 18px;
   border-radius: 22px;
   font-size: 16px;
@@ -456,9 +459,10 @@ body {
   margin-top: -4px;
 }
 .msg-digitando {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 5px !important;
   padding: 11px 15px !important;
   border-radius: 20px !important;
   border-bottom-left-radius: 6px !important;
@@ -498,12 +502,13 @@ body {
   flex-direction: column;
   max-width: 74%;
   position: relative;
+  background: transparent !important;
 }
-.msg-wrap.eu {
+.wrap-eu {
   align-self: flex-end;
   align-items: flex-end;
 }
-.msg-wrap.ela {
+.wrap-ela {
   align-self: flex-start;
   align-items: flex-start;
 }
@@ -513,7 +518,7 @@ body {
   gap: 6px;
   position: relative;
 }
-.msg-wrap.eu .msg-linha {
+.wrap-eu .msg-linha {
   flex-direction: row-reverse;
 }
 
@@ -521,6 +526,8 @@ body {
 .msg {
   width: fit-content;
   max-width: 100%;
+}
+.msg-conteudo {
   display: flex;
   flex-direction: column;
 }
@@ -618,7 +625,7 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: -5px;
+  margin-top: 4px;
   z-index: 2;
 }
 .reacoes-dir {

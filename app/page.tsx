@@ -856,7 +856,7 @@ export default function Home() {
               const emojis = ["❤️", "😂", "👍", "🔥", "😮", "🎉"];
 
               return (
-                <div key={m.id} className={`msg-wrap ${souEu ? "eu" : "ela"}`}>
+                <div key={m.id} className={`msg-wrap ${souEu ? "wrap-eu" : "wrap-ela"}`}>
                   <div className="msg-linha">
                     {/* Botão para reagir com emoji */}
                     <div style={{ position: "relative" }}>
@@ -912,13 +912,17 @@ export default function Home() {
                       </div>
                     ) : parsed.type === "audio" && parsed.audio ? (
                       <div className={`msg ${souEu ? "eu" : "ela"}`}>
-                        <AudioPlayer src={parsed.audio} duration={parsed.duration} souEu={souEu} />
-                        <span className="msg-hora">{formatarHora(m.created_at)}</span>
+                        <div className="msg-conteudo">
+                          <AudioPlayer src={parsed.audio} duration={parsed.duration} souEu={souEu} />
+                          <span className="msg-hora">{formatarHora(m.created_at)}</span>
+                        </div>
                       </div>
                     ) : (
                       <div className={`msg ${souEu ? "eu" : "ela"}`}>
-                        <div className="msg-texto-corpo">{parsed.text}</div>
-                        <span className="msg-hora">{formatarHora(m.created_at)}</span>
+                        <div className="msg-conteudo">
+                          <div className="msg-texto-corpo">{parsed.text}</div>
+                          <span className="msg-hora">{formatarHora(m.created_at)}</span>
+                        </div>
                       </div>
                     )}
                   </div>
