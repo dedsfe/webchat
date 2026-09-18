@@ -322,49 +322,138 @@ body {
   padding: 0 12px 6px;
 }
 
-/* Preview da foto antes de enviar */
-.preview-foto-wrap {
-  padding: 0 20px 4px;
-  max-width: 720px;
+/* Galeria / Grid de Fotos na Mensagem */
+.galeria-wrapper {
+  max-width: 320px;
   width: 100%;
-  margin: 0 auto;
-  display: flex;
 }
-.preview-foto {
-  position: relative;
-  display: inline-block;
-  width: 68px;
-  height: 68px;
-  border-radius: 14px;
+.galeria-grid {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  max-width: 320px;
+  border-radius: 17px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border: 2px solid #2F80ED;
-  background: #000;
 }
-.preview-foto img {
+.galeria-grid.grid-2 {
+  grid-template-columns: 1fr 1fr;
+}
+.galeria-grid.grid-3 {
+  grid-template-columns: 1fr 1fr;
+}
+.galeria-grid.grid-3 .galeria-item:first-child {
+  grid-column: span 2;
+  aspect-ratio: 16 / 9.5;
+}
+.galeria-grid.grid-4 {
+  grid-template-columns: 1fr 1fr;
+}
+.galeria-item {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  cursor: pointer;
+  background: #E5E7EB;
+}
+.galeria-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.2s ease, opacity 0.15s ease;
+}
+.galeria-item:hover .galeria-img {
+  transform: scale(1.03);
+  opacity: 0.94;
+}
+.galeria-mais-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+.msg-foto.com-legenda.msg-album .galeria-grid {
+  border-radius: 17px 17px 0 0;
+}
+
+/* Barra de miniaturas de fotos antes de enviar */
+.preview-fotos-barra {
+  padding: 0 clamp(20px, 3.5vw, 44px) 8px;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.preview-fotos-lista {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+}
+.preview-foto-card {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 13px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+  background: #E5E7EB;
+}
+.preview-foto-card img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-.preview-remover {
+.preview-foto-remover {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.65);
-  color: #fff;
   border: none;
+  background: rgba(0, 0, 0, 0.65);
+  color: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease;
 }
-.preview-remover:hover {
-  background: rgba(0, 0, 0, 0.85);
+.preview-foto-remover:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: scale(1.1);
+}
+.preview-foto-add-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 13px;
+  border: 2px dashed #C3C8CF;
+  background: rgba(255, 255, 255, 0.6);
+  color: #656D76;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.preview-foto-add-btn:hover {
+  border-color: #2F80ED;
+  color: #2F80ED;
+  background: #E9F4FD;
 }
 
 /* Overlay de arrastar e soltar (drag & drop) */
@@ -392,14 +481,14 @@ body {
   font-size: 17px;
 }
 
-/* Visualizador em tela cheia (Lightbox) */
+/* Visualizador em tela cheia (Lightbox com Galeria) */
 .lightbox-wrap {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0, 0, 0, 0.88);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -411,21 +500,39 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.lightbox-acoes {
+.lightbox-topo {
   position: absolute;
   top: 18px;
+  left: 20px;
   right: 20px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
   z-index: 10001;
+}
+.lightbox-contador {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  user-select: none;
+}
+.lightbox-acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .lightbox-btn {
   height: 38px;
   padding: 0 14px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
   color: #FFFFFF;
   display: flex;
   align-items: center;
@@ -438,10 +545,54 @@ body {
   transition: background 0.15s ease, transform 0.1s ease;
 }
 .lightbox-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.32);
 }
 .lightbox-btn:active {
   transform: scale(0.97);
+}
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10001;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.35);
+  transform: translateY(-50%) scale(1.08);
+}
+.lightbox-nav:active {
+  transform: translateY(-50%) scale(0.94);
+}
+.lightbox-nav.anterior {
+  left: 24px;
+}
+.lightbox-nav.proximo {
+  right: 24px;
+}
+@media (max-width: 600px) {
+  .lightbox-nav {
+    width: 40px;
+    height: 40px;
+  }
+  .lightbox-nav.anterior {
+    left: 10px;
+  }
+  .lightbox-nav.proximo {
+    right: 10px;
+  }
 }
 .lightbox-img {
   max-width: 90vw;
@@ -450,6 +601,7 @@ body {
   border-radius: 12px;
   box-shadow: 0 16px 50px rgba(0, 0, 0, 0.6);
   user-select: none;
+  animation: fadeIn 0.15s ease-out;
 }
 
 /* Informações do topo (Presença / Usuários Online) */

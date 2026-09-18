@@ -19,6 +19,7 @@ type ParsedMsg = {
   type: "text" | "image" | "audio";
   text?: string;
   image?: string;
+  images?: string[];
   audio?: string;
   duration?: number;
   reactions?: Record<string, string[]>;
@@ -27,7 +28,7 @@ type ParsedMsg = {
 
 function parseContent(content: string): ParsedMsg {
   if (content.startsWith("data:image/")) {
-    return { type: "image", image: content, text: "" };
+    return { type: "image", image: content, images: [content], text: "" };
   }
   if (content.startsWith("data:audio/")) {
     return { type: "audio", audio: content };
@@ -36,10 +37,17 @@ function parseContent(content: string): ParsedMsg {
     try {
       const parsed = JSON.parse(content);
       if (parsed && typeof parsed === "object") {
+        const imagesList: string[] | undefined = Array.isArray(parsed.images)
+          ? parsed.images
+          : typeof parsed.image === "string"
+          ? [parsed.image]
+          : undefined;
+
         return {
-          type: parsed.type || "text",
+          type: parsed.type || (imagesList ? "image" : "text"),
           text: (parsed.text as string) || "",
-          image: parsed.image as string | undefined,
+          image: (parsed.image as string) || (imagesList && imagesList[0] ? imagesList[0] : undefined),
+          images: imagesList,
           audio: parsed.audio as string | undefined,
           duration: parsed.duration as number | undefined,
           reactions: parsed.reactions,
@@ -56,13 +64,67 @@ function parseContent(content: string): ParsedMsg {
 function extrairResumo(content: string): { resumo: string; type: "text" | "image" | "audio" } {
   const parsed = parseContent(content);
   if (parsed.type === "image") {
-    return { resumo: parsed.text ? `📷 ${parsed.text}` : "📷 Foto", type: "image" };
+    const count = parsed.images && parsed.images.length > 1 ? ` (${parsed.images.length} fotos)` : "";
+    return { resumo: parsed.text ? `📷 ${parsed.text}` : `📷 Foto${count}`, type: "image" };
   }
   if (parsed.type === "audio") {
     const dur = parsed.duration ? ` (${formatTempo(parsed.duration)})` : "";
     return { resumo: `🎙️ Áudio${dur}`, type: "audio" };
   }
   return { resumo: parsed.text || "Mensagem", type: "text" };
+}
+
+function GaleriaFotos({
+  images,
+  onAmpliar,
+}: {
+  images: string[];
+  onAmpliar: (index: number) => void;
+}) {
+  const total = images.length;
+
+  if (total === 1) {
+    return (
+      <img
+        src={images[0]}
+        alt="Foto enviada"
+        className="msg-foto-img borda-zero"
+        onClick={() => onAmpliar(0)}
+      />
+    );
+  }
+
+  const exibidas = images.slice(0, 4);
+  const restantes = total - 4;
+
+  let layoutClass = "grid-4";
+  if (total === 2) layoutClass = "grid-2";
+  if (total === 3) layoutClass = "grid-3";
+
+  return (
+    <div className={`galeria-grid ${layoutClass}`}>
+      {exibidas.map((src, i) => {
+        const isLastAndMore = i === 3 && restantes > 0;
+        return (
+          <div
+            key={i}
+            className="galeria-item"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAmpliar(i);
+            }}
+          >
+            <img src={src} alt={`Foto ${i + 1}`} className="galeria-img" />
+            {isLastAndMore && (
+              <div className="galeria-mais-overlay">
+                <span>+{restantes + 1}</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function MsgQuote({
@@ -311,9 +373,9 @@ export default function Home() {
   const [copiado, setCopiado] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [texto, setTexto] = useState("");
-  const [fotoAnexada, setFotoAnexada] = useState<string | null>(null);
+  const [fotosAnexadas, setFotosAnexadas] = useState<string[]>([]);
   const [processandoFoto, setProcessandoFoto] = useState(false);
-  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null);
+  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
   const [arrastando, setArrastando] = useState(false);
   const [usuariosOnline, setUsuariosOnline] = useState<string[]>([]);
   const [typingTimestamps, setTypingTimestamps] = useState<Record<string, number>>({});
@@ -336,6 +398,34 @@ export default function Home() {
   const audioChunksRef = useRef<Blob[]>([]);
   const gravandoTimerRef = useRef<NodeJS.Timeout | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  function abrirLightbox(images: string[], index: number = 0) {
+    setLightboxState({ images, index });
+  }
+
+  function fecharLightbox() {
+    setLightboxState(null);
+  }
+
+  function fotoAnterior(e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setLightboxState((cur) => {
+      if (!cur || cur.images.length <= 1) return cur;
+      return { ...cur, index: (cur.index - 1 + cur.images.length) % cur.images.length };
+    });
+  }
+
+  function fotoProxima(e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setLightboxState((cur) => {
+      if (!cur || cur.images.length <= 1) return cur;
+      return { ...cur, index: (cur.index + 1) % cur.images.length };
+    });
+  }
+
+  function removerFotoAnexada(index: number) {
+    setFotosAnexadas((atuais) => atuais.filter((_, i) => i !== index));
+  }
 
   function iniciarResposta(m: Msg) {
     const { resumo, type } = extrairResumo(m.content);
@@ -521,22 +611,35 @@ export default function Home() {
       if (!sala || !nome) return;
       const items = e.clipboardData?.items;
       if (!items) return;
+      const files: File[] = [];
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.startsWith("image/")) {
           const file = items[i].getAsFile();
-          if (file) {
-            e.preventDefault();
-            carregarFoto(file);
-            break;
-          }
+          if (file) files.push(file);
         }
+      }
+      if (files.length > 0) {
+        e.preventDefault();
+        carregarFotos(files);
       }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        setFotoAmpliada(null);
+        setLightboxState(null);
         setRespondendoA(null);
+      }
+      if (e.key === "ArrowLeft") {
+        setLightboxState((cur) => {
+          if (!cur || cur.images.length <= 1) return cur;
+          return { ...cur, index: (cur.index - 1 + cur.images.length) % cur.images.length };
+        });
+      }
+      if (e.key === "ArrowRight") {
+        setLightboxState((cur) => {
+          if (!cur || cur.images.length <= 1) return cur;
+          return { ...cur, index: (cur.index + 1) % cur.images.length };
+        });
       }
     };
 
@@ -548,17 +651,18 @@ export default function Home() {
     };
   }, [sala, nome]);
 
-  async function carregarFoto(file: File) {
-    if (!file.type.startsWith("image/")) {
-      alert("Por favor, selecione um arquivo de imagem.");
+  async function carregarFotos(files: File[] | FileList) {
+    const lista = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (lista.length === 0) {
+      alert("Por favor, selecione arquivos de imagem válidos.");
       return;
     }
     setProcessandoFoto(true);
     try {
-      const dataUrl = await otimizarImagem(file);
-      setFotoAnexada(dataUrl);
+      const urls = await Promise.all(lista.map((f) => otimizarImagem(f)));
+      setFotosAnexadas((atuais) => [...atuais, ...urls]);
     } catch (err) {
-      alert("Não foi possível carregar a imagem: " + (err instanceof Error ? err.message : String(err)));
+      alert("Não foi possível carregar as fotos: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setProcessandoFoto(false);
       if (fileInputRef.current) {
@@ -790,7 +894,7 @@ export default function Home() {
 
   async function enviar() {
     const textoLimpo = texto.trim();
-    if ((!textoLimpo && !fotoAnexada) || !sala || !nome || !sb.current || processandoFoto) return;
+    if ((!textoLimpo && fotosAnexadas.length === 0) || !sala || !nome || !sb.current || processandoFoto) return;
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     avisarDigitando(false);
@@ -798,10 +902,11 @@ export default function Home() {
     const rep = respondendoA;
     setRespondendoA(null);
 
-    const conteudo = fotoAnexada
+    const conteudo = fotosAnexadas.length > 0
       ? JSON.stringify({
           type: "image",
-          image: fotoAnexada,
+          image: fotosAnexadas[0],
+          images: fotosAnexadas,
           text: textoLimpo,
           replyTo: rep || undefined,
         })
@@ -814,7 +919,7 @@ export default function Home() {
       : textoLimpo;
 
     setTexto("");
-    setFotoAnexada(null);
+    setFotosAnexadas([]);
 
     // mostra na hora; o echo do realtime é ignorado pelo dedup de id
     const idTemp = "tmp-" + crypto.randomUUID();
@@ -881,8 +986,8 @@ export default function Home() {
       onDrop={(e) => {
         e.preventDefault();
         setArrastando(false);
-        const file = e.dataTransfer.files?.[0];
-        if (file) carregarFoto(file);
+        const files = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("image/"));
+        if (files.length > 0) carregarFotos(files);
       }}
     >
       <div className="topo" />
@@ -1004,38 +1109,39 @@ export default function Home() {
                     </div>
 
                     {/* Conteúdo da bolha */}
-                    {parsed.type === "image" && parsed.image ? (
-                      parsed.replyTo || parsed.text ? (
-                        <div className={`msg msg-foto com-legenda ${souEu ? "eu" : "ela"}`}>
-                          {parsed.replyTo && (
-                            <div style={{ padding: "6px 8px 2px" }}>
-                              <MsgQuote replyTo={parsed.replyTo} nomeUsuario={nome} onNavigate={navegarAteMensagem} />
+                    {parsed.type === "image" && (parsed.images || parsed.image) ? (
+                      (() => {
+                        const imagesList = parsed.images && parsed.images.length > 0 ? parsed.images : [parsed.image!];
+                        const isMulti = imagesList.length > 1;
+
+                        return parsed.replyTo || parsed.text ? (
+                          <div className={`msg msg-foto com-legenda ${souEu ? "eu" : "ela"} ${isMulti ? "msg-album" : ""}`}>
+                            {parsed.replyTo && (
+                              <div style={{ padding: "6px 8px 2px" }}>
+                                <MsgQuote replyTo={parsed.replyTo} nomeUsuario={nome} onNavigate={navegarAteMensagem} />
+                              </div>
+                            )}
+                            <div className="galeria-wrapper">
+                              <GaleriaFotos
+                                images={imagesList}
+                                onAmpliar={(idx) => abrirLightbox(imagesList, idx)}
+                              />
                             </div>
-                          )}
-                          <img
-                            src={parsed.image}
-                            alt="Foto enviada"
-                            className="msg-foto-img"
-                            onLoad={() => fim.current?.scrollIntoView()}
-                            onClick={() => setFotoAmpliada(parsed.image!)}
-                          />
-                          {parsed.text ? <div className="msg-foto-legenda">{parsed.text}</div> : null}
-                          <span className="msg-hora foto-hora">{formatarHora(m.created_at)}</span>
-                        </div>
-                      ) : (
-                        <div className={`msg-foto-borda-livre ${souEu ? "eu" : "ela"}`}>
-                          <div className="msg-foto-container">
-                            <img
-                              src={parsed.image}
-                              alt="Foto enviada"
-                              className="msg-foto-img borda-zero"
-                              onLoad={() => fim.current?.scrollIntoView()}
-                              onClick={() => setFotoAmpliada(parsed.image!)}
-                            />
-                            <span className="foto-hora-badge">{formatarHora(m.created_at)}</span>
+                            {parsed.text ? <div className="msg-foto-legenda">{parsed.text}</div> : null}
+                            <span className="msg-hora foto-hora">{formatarHora(m.created_at)}</span>
                           </div>
-                        </div>
-                      )
+                        ) : (
+                          <div className={`msg-foto-borda-livre ${souEu ? "eu" : "ela"} ${isMulti ? "album-livre" : ""}`}>
+                            <div className="msg-foto-container">
+                              <GaleriaFotos
+                                images={imagesList}
+                                onAmpliar={(idx) => abrirLightbox(imagesList, idx)}
+                              />
+                              <span className="foto-hora-badge">{formatarHora(m.created_at)}</span>
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : parsed.type === "audio" && parsed.audio ? (
                       parsed.replyTo ? (
                         <div className={`msg ${souEu ? "eu" : "ela"}`} style={{ padding: "6px 8px 6px 6px", borderRadius: 20 }}>
@@ -1141,20 +1247,36 @@ export default function Home() {
             </div>
           )}
 
-          {/* Miniatura da foto antes de enviar */}
-          {fotoAnexada && (
-            <div className="preview-foto-wrap">
-              <div className="preview-foto">
-                <img src={fotoAnexada} alt="Foto pronta para envio" />
+          {/* Miniaturas das fotos antes de enviar */}
+          {fotosAnexadas.length > 0 && (
+            <div className="preview-fotos-barra">
+              <div className="preview-fotos-lista">
+                {fotosAnexadas.map((foto, idx) => (
+                  <div key={idx} className="preview-foto-card">
+                    <img src={foto} alt={`Foto ${idx + 1}`} />
+                    <button
+                      type="button"
+                      className="preview-foto-remover"
+                      onClick={() => removerFotoAnexada(idx)}
+                      title="Remover foto"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
                 <button
                   type="button"
-                  className="preview-remover"
-                  onClick={() => setFotoAnexada(null)}
-                  title="Remover foto"
+                  className="preview-foto-add-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Adicionar mais fotos"
+                  disabled={processandoFoto}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                 </button>
               </div>
@@ -1192,15 +1314,17 @@ export default function Home() {
             </div>
           ) : (
             <div className="input-bar">
-              {/* Input oculto para selecionar foto */}
+              {/* Input oculto para selecionar múltiplas fotos */}
               <input
                 type="file"
                 ref={fileInputRef}
                 accept="image/*"
+                multiple
                 style={{ display: "none" }}
                 onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) carregarFoto(file);
+                  if (e.target.files && e.target.files.length > 0) {
+                    carregarFotos(e.target.files);
+                  }
                 }}
               />
 
@@ -1208,7 +1332,7 @@ export default function Home() {
                 type="button"
                 className="btn-foto"
                 onClick={() => fileInputRef.current?.click()}
-                title="Enviar foto (ou cole com Ctrl+V)"
+                title="Enviar fotos (ou selecione/cole várias com Ctrl+V)"
                 disabled={processandoFoto}
               >
                 {processandoFoto ? (
@@ -1250,13 +1374,13 @@ export default function Home() {
                 placeholder={
                   respondendoA
                     ? `respondendo a ${respondendoA.autor === nome ? "você" : respondendoA.autor}...`
-                    : fotoAnexada
-                    ? "adicionar legenda (opcional)..."
+                    : fotosAnexadas.length > 0
+                    ? `legenda para ${fotosAnexadas.length === 1 ? "a foto" : `as ${fotosAnexadas.length} fotos`} (opcional)...`
                     : "escreve aqui (ou grave um áudio)"
                 }
               />
 
-              <button className="enviar" onClick={enviar} disabled={(!texto.trim() && !fotoAnexada) || processandoFoto}>
+              <button className="enviar" onClick={enviar} disabled={(!texto.trim() && fotosAnexadas.length === 0) || processandoFoto}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                   <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -1266,42 +1390,76 @@ export default function Home() {
         </>
       )}
 
-      {/* Visualizador da foto ampliada em tela cheia (Lightbox) */}
-      {fotoAmpliada && (
-        <div className="lightbox-wrap" onClick={() => setFotoAmpliada(null)}>
-          <div className="lightbox-acoes" onClick={(e) => e.stopPropagation()}>
-            <a
-              href={fotoAmpliada}
-              download="foto.webp"
-              className="lightbox-btn"
-              title="Baixar imagem"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Baixar
-            </a>
+      {/* Visualizador da foto ampliada em tela cheia (Lightbox com galeria) */}
+      {lightboxState && (
+        <div className="lightbox-wrap" onClick={fecharLightbox}>
+          <div className="lightbox-topo" onClick={(e) => e.stopPropagation()}>
+            {lightboxState.images.length > 1 ? (
+              <div className="lightbox-contador">
+                {lightboxState.index + 1} / {lightboxState.images.length}
+              </div>
+            ) : <div />}
+            <div className="lightbox-acoes">
+              <a
+                href={lightboxState.images[lightboxState.index]}
+                download={`foto-${lightboxState.index + 1}.webp`}
+                className="lightbox-btn"
+                title="Baixar imagem"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Baixar
+              </a>
+              <button
+                type="button"
+                className="lightbox-btn"
+                onClick={fecharLightbox}
+                title="Fechar (Esc)"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+                Fechar
+              </button>
+            </div>
+          </div>
+
+          {lightboxState.images.length > 1 && (
             <button
               type="button"
-              className="lightbox-btn"
-              onClick={() => setFotoAmpliada(null)}
-              title="Fechar (Esc)"
+              className="lightbox-nav anterior"
+              onClick={fotoAnterior}
+              title="Foto anterior (←)"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
               </svg>
-              Fechar
             </button>
-          </div>
+          )}
+
           <img
-            src={fotoAmpliada}
-            alt="Foto em alta resolução"
+            src={lightboxState.images[lightboxState.index]}
+            alt={`Foto ${lightboxState.index + 1} em alta resolução`}
             className="lightbox-img"
             onClick={(e) => e.stopPropagation()}
           />
+
+          {lightboxState.images.length > 1 && (
+            <button
+              type="button"
+              className="lightbox-nav proximo"
+              onClick={fotoProxima}
+              title="Próxima foto (→)"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          )}
         </div>
       )}
     </div>
