@@ -2284,8 +2284,8 @@ body {
 
 .msg-foto-container,
 .galeria-grid {
-  border: 1px solid rgba(255, 255, 255, 0.64);
-  box-shadow: 0 10px 18px rgba(37, 67, 48, 0.12);
+  border: none;
+  box-shadow: none;
 }
 
 .reacao-pill.ativa {
@@ -2308,6 +2308,25 @@ body {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 5px 12px rgba(37, 67, 48, 0.1);
   backdrop-filter: blur(18px) saturate(130%);
   -webkit-backdrop-filter: blur(18px) saturate(130%);
+}
+
+/* O compositor se integra ao campo de mensagens sem uma linha de separação. */
+.input-bar-wrap {
+  border-top: none;
+}
+
+/* As ações ficam no lado interno da conversa. Nunca atravessam a borda visível
+   e permanecem alcançáveis mesmo quando a mensagem está junto à lateral. */
+@media (min-width: 769px) {
+  .wrap-eu .msg-acoes-wrap {
+    right: calc(100% + 9px);
+    left: auto;
+  }
+
+  .wrap-ela .msg-acoes-wrap {
+    right: auto;
+    left: calc(100% + 9px);
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
