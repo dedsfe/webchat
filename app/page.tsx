@@ -8,6 +8,13 @@ const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 type Msg = { id: string; author: string; content: string; created_at: string };
 
+type ReplyInfo = {
+  id: string;
+  autor: string;
+  resumo: string;
+  type?: "text" | "image" | "audio";
+};
+
 type ParsedMsg = {
   type: "text" | "image" | "audio";
   text?: string;
@@ -15,6 +22,7 @@ type ParsedMsg = {
   audio?: string;
   duration?: number;
   reactions?: Record<string, string[]>;
+  replyTo?: ReplyInfo;
 };
 
 function parseContent(content: string): ParsedMsg {
@@ -28,35 +36,62 @@ function parseContent(content: string): ParsedMsg {
     try {
       const parsed = JSON.parse(content);
       if (parsed && typeof parsed === "object") {
-        if (parsed.type === "image" && parsed.image) {
-          return {
-            type: "image",
-            image: parsed.image as string,
-            text: (parsed.text as string) || "",
-            reactions: parsed.reactions,
-          };
-        }
-        if (parsed.type === "audio" && parsed.audio) {
-          return {
-            type: "audio",
-            audio: parsed.audio as string,
-            duration: parsed.duration as number | undefined,
-            reactions: parsed.reactions,
-          };
-        }
-        if (parsed.type === "text") {
-          return {
-            type: "text",
-            text: (parsed.text as string) || "",
-            reactions: parsed.reactions,
-          };
-        }
+        return {
+          type: parsed.type || "text",
+          text: (parsed.text as string) || "",
+          image: parsed.image as string | undefined,
+          audio: parsed.audio as string | undefined,
+          duration: parsed.duration as number | undefined,
+          reactions: parsed.reactions,
+          replyTo: parsed.replyTo as ReplyInfo | undefined,
+        };
       }
     } catch {
       // continua para fallback de texto
     }
   }
   return { type: "text", text: content };
+}
+
+function extrairResumo(content: string): { resumo: string; type: "text" | "image" | "audio" } {
+  const parsed = parseContent(content);
+  if (parsed.type === "image") {
+    return { resumo: parsed.text ? `📷 ${parsed.text}` : "📷 Foto", type: "image" };
+  }
+  if (parsed.type === "audio") {
+    const dur = parsed.duration ? ` (${formatTempo(parsed.duration)})` : "";
+    return { resumo: `🎙️ Áudio${dur}`, type: "audio" };
+  }
+  return { resumo: parsed.text || "Mensagem", type: "text" };
+}
+
+function MsgQuote({
+  replyTo,
+  nomeUsuario,
+  onNavigate,
+}: {
+  replyTo: ReplyInfo;
+  nomeUsuario: string | null;
+  onNavigate: (id: string) => void;
+}) {
+  return (
+    <div
+      className="msg-quote"
+      onClick={(e) => {
+        e.stopPropagation();
+        onNavigate(replyTo.id);
+      }}
+      title="Ir para a mensagem citada"
+    >
+      <div className="msg-quote-linha" />
+      <div className="msg-quote-info">
+        <span className="msg-quote-nome">
+          {replyTo.autor === nomeUsuario ? "Você" : replyTo.autor}
+        </span>
+        <span className="msg-quote-trecho">{replyTo.resumo}</span>
+      </div>
+    </div>
+  );
 }
 
 function formatarHora(isoString: string) {
@@ -288,8 +323,10 @@ export default function Home() {
   const [seletorAbertoId, setSeletorAbertoId] = useState<string | null>(null);
   const [gravando, setGravando] = useState(false);
   const [gravandoTempo, setGravandoTempo] = useState(0);
+  const [respondendoA, setRespondendoA] = useState<ReplyInfo | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputMsgRef = useRef<HTMLInputElement>(null);
   const fim = useRef<HTMLDivElement>(null);
   const sb = useRef<SupabaseClient | null>(null);
   const canalRef = useRef<ReturnType<SupabaseClient["channel"]> | null>(null);
@@ -299,6 +336,28 @@ export default function Home() {
   const audioChunksRef = useRef<Blob[]>([]);
   const gravandoTimerRef = useRef<NodeJS.Timeout | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  function iniciarResposta(m: Msg) {
+    const { resumo, type } = extrairResumo(m.content);
+    setRespondendoA({
+      id: m.id,
+      autor: m.author,
+      resumo,
+      type,
+    });
+    inputMsgRef.current?.focus();
+  }
+
+  function navegarAteMensagem(id: string) {
+    const el = document.getElementById(`msg-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("msg-destaque-piscar");
+      setTimeout(() => {
+        el.classList.remove("msg-destaque-piscar");
+      }, 1500);
+    }
+  }
 
   // Fecha o menu de reações ao clicar fora
   useEffect(() => {
@@ -477,6 +536,7 @@ export default function Home() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setFotoAmpliada(null);
+        setRespondendoA(null);
       }
     };
 
@@ -578,10 +638,13 @@ export default function Home() {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64Audio = reader.result as string;
+        const rep = respondendoA;
+        setRespondendoA(null);
         const conteudo = JSON.stringify({
           type: "audio",
           audio: base64Audio,
           duration: duracao,
+          replyTo: rep || undefined,
         });
 
         const idTemp = "tmp-" + crypto.randomUUID();
@@ -732,11 +795,21 @@ export default function Home() {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     avisarDigitando(false);
 
+    const rep = respondendoA;
+    setRespondendoA(null);
+
     const conteudo = fotoAnexada
       ? JSON.stringify({
           type: "image",
           image: fotoAnexada,
           text: textoLimpo,
+          replyTo: rep || undefined,
+        })
+      : rep
+      ? JSON.stringify({
+          type: "text",
+          text: textoLimpo,
+          replyTo: rep,
         })
       : textoLimpo;
 
@@ -871,20 +944,38 @@ export default function Home() {
               const emojis = ["❤️", "😂", "👍", "🔥", "😮", "🎉"];
 
               return (
-                <div key={m.id} className={`msg-wrap ${souEu ? "wrap-eu" : "wrap-ela"}`}>
+                <div
+                  key={m.id}
+                  id={`msg-${m.id}`}
+                  className={`msg-wrap ${souEu ? "wrap-eu" : "wrap-ela"}`}
+                  onDoubleClick={() => iniciarResposta(m)}
+                  title="Duplo clique para responder"
+                >
                   <div className="msg-linha">
-                    {/* Botão para reagir com emoji */}
-                    <div style={{ position: "relative" }}>
+                    {/* Ações da mensagem (Responder + Reagir) */}
+                    <div className="msg-acoes-wrap">
                       <button
                         type="button"
-                        className="btn-reagir-gatilho"
+                        className="btn-msg-acao"
+                        onClick={() => iniciarResposta(m)}
+                        title="Responder"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="9 17 4 12 9 7" />
+                          <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn-msg-acao"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSeletorAbertoId(seletorAbertoId === m.id ? null : m.id);
                         }}
                         title="Reagir com emoji"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="12" cy="12" r="10" />
                           <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                           <line x1="9" y1="9" x2="9.01" y2="9" strokeWidth="3" />
@@ -914,8 +1005,13 @@ export default function Home() {
 
                     {/* Conteúdo da bolha */}
                     {parsed.type === "image" && parsed.image ? (
-                      parsed.text ? (
+                      parsed.replyTo || parsed.text ? (
                         <div className={`msg msg-foto com-legenda ${souEu ? "eu" : "ela"}`}>
+                          {parsed.replyTo && (
+                            <div style={{ padding: "6px 8px 2px" }}>
+                              <MsgQuote replyTo={parsed.replyTo} nomeUsuario={nome} onNavigate={navegarAteMensagem} />
+                            </div>
+                          )}
                           <img
                             src={parsed.image}
                             alt="Foto enviada"
@@ -923,7 +1019,7 @@ export default function Home() {
                             onLoad={() => fim.current?.scrollIntoView()}
                             onClick={() => setFotoAmpliada(parsed.image!)}
                           />
-                          <div className="msg-foto-legenda">{parsed.text}</div>
+                          {parsed.text ? <div className="msg-foto-legenda">{parsed.text}</div> : null}
                           <span className="msg-hora foto-hora">{formatarHora(m.created_at)}</span>
                         </div>
                       ) : (
@@ -941,17 +1037,34 @@ export default function Home() {
                         </div>
                       )
                     ) : parsed.type === "audio" && parsed.audio ? (
-                      <div className={`msg msg-audio ${souEu ? "eu" : "ela"}`}>
-                        <AudioPlayer
-                          src={parsed.audio}
-                          duration={parsed.duration}
-                          souEu={souEu}
-                          hora={formatarHora(m.created_at)}
-                        />
-                      </div>
+                      parsed.replyTo ? (
+                        <div className={`msg ${souEu ? "eu" : "ela"}`} style={{ padding: "6px 8px 6px 6px", borderRadius: 20 }}>
+                          <div className="msg-conteudo" style={{ gap: 5 }}>
+                            <MsgQuote replyTo={parsed.replyTo} nomeUsuario={nome} onNavigate={navegarAteMensagem} />
+                            <AudioPlayer
+                              src={parsed.audio}
+                              duration={parsed.duration}
+                              souEu={souEu}
+                              hora={formatarHora(m.created_at)}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={`msg msg-audio ${souEu ? "eu" : "ela"}`}>
+                          <AudioPlayer
+                            src={parsed.audio}
+                            duration={parsed.duration}
+                            souEu={souEu}
+                            hora={formatarHora(m.created_at)}
+                          />
+                        </div>
+                      )
                     ) : (
                       <div className={`msg ${souEu ? "eu" : "ela"}`}>
                         <div className="msg-conteudo">
+                          {parsed.replyTo && (
+                            <MsgQuote replyTo={parsed.replyTo} nomeUsuario={nome} onNavigate={navegarAteMensagem} />
+                          )}
                           <div className="msg-texto-corpo">{parsed.text}</div>
                           <span className="msg-hora">{formatarHora(m.created_at)}</span>
                         </div>
@@ -1001,6 +1114,32 @@ export default function Home() {
             )}
             <div ref={fim} />
           </div>
+
+          {/* Barra ativa de citação (Respondendo a ...) */}
+          {respondendoA && (
+            <div className="barra-reply-wrap">
+              <div className="barra-reply">
+                <div className="barra-reply-linha" />
+                <div className="barra-reply-corpo">
+                  <div className="barra-reply-autor">
+                    Respondendo a {respondendoA.autor === nome ? "você" : respondendoA.autor}
+                  </div>
+                  <div className="barra-reply-texto">{respondendoA.resumo}</div>
+                </div>
+                <button
+                  type="button"
+                  className="barra-reply-fechar"
+                  onClick={() => setRespondendoA(null)}
+                  title="Cancelar resposta"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Miniatura da foto antes de enviar */}
           {fotoAnexada && (
@@ -1100,11 +1239,21 @@ export default function Home() {
               </button>
 
               <input
+                ref={inputMsgRef}
                 className="campo"
                 value={texto}
                 onChange={handleTextoChange}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && enviar()}
-                placeholder={fotoAnexada ? "adicionar legenda (opcional)..." : "escreve aqui (ou grave um áudio)"}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) enviar();
+                  if (e.key === "Escape" && respondendoA) setRespondendoA(null);
+                }}
+                placeholder={
+                  respondendoA
+                    ? `respondendo a ${respondendoA.autor === nome ? "você" : respondendoA.autor}...`
+                    : fotoAnexada
+                    ? "adicionar legenda (opcional)..."
+                    : "escreve aqui (ou grave um áudio)"
+                }
               />
 
               <button className="enviar" onClick={enviar} disabled={(!texto.trim() && !fotoAnexada) || processandoFoto}>

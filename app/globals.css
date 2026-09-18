@@ -600,12 +600,21 @@ body {
   padding: 0 8px 4px;
 }
 
-/* Botão gatilho para reagir com emoji */
-.btn-reagir-gatilho {
+/* ==========================================================================
+   Ações da Mensagem (Responder + Reagir com Emoji)
+   ========================================================================== */
+.msg-acoes-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  flex-shrink: 0;
+}
+.btn-msg-acao {
   opacity: 0;
   border: none;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 50%;
   width: 26px;
   height: 26px;
@@ -614,15 +623,165 @@ body {
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  transition: opacity 0.15s ease, transform 0.1s ease;
-  flex-shrink: 0;
+  transition: opacity 0.15s ease, transform 0.12s ease, background 0.15s ease, color 0.15s ease;
+  color: #4B5563;
 }
-.msg-wrap:hover .btn-reagir-gatilho {
+.msg-wrap:hover .btn-msg-acao {
   opacity: 0.85;
 }
-.btn-reagir-gatilho:hover {
+.btn-msg-acao:hover {
   opacity: 1;
   transform: scale(1.15);
+  color: #2F80ED;
+  background: #FFFFFF;
+}
+@media (hover: none) {
+  .btn-msg-acao {
+    opacity: 0.55;
+  }
+}
+
+/* Card de citação / reply dentro da bolha */
+.msg-quote {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+  user-select: none;
+  max-width: 100%;
+}
+.eu .msg-quote {
+  background: rgba(47, 128, 237, 0.1);
+}
+.eu .msg-quote:hover {
+  background: rgba(47, 128, 237, 0.18);
+}
+.ela .msg-quote {
+  background: rgba(0, 0, 0, 0.05);
+}
+.ela .msg-quote:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.msg-quote-linha {
+  width: 3px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.eu .msg-quote-linha {
+  background: #2F80ED;
+}
+.ela .msg-quote-linha {
+  background: #6B7280;
+}
+.msg-quote-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+.msg-quote-nome {
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.eu .msg-quote-nome {
+  color: #2F80ED;
+}
+.ela .msg-quote-nome {
+  color: #374151;
+}
+.msg-quote-trecho {
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.75;
+}
+
+/* Barra ativa de citação sobre o campo de texto */
+.barra-reply-wrap {
+  padding: 0 clamp(20px, 3.5vw, 44px) 8px;
+  width: 100%;
+  animation: slideUpReply 0.16s ease-out;
+}
+@keyframes slideUpReply {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.barra-reply {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  padding: 7px 12px 7px 10px;
+  position: relative;
+}
+.barra-reply-linha {
+  width: 3.5px;
+  height: 28px;
+  border-radius: 999px;
+  background: #2F80ED;
+  flex-shrink: 0;
+}
+.barra-reply-corpo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.barra-reply-autor {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #2F80ED;
+  line-height: 1.2;
+}
+.barra-reply-texto {
+  font-size: 13px;
+  color: #4B5563;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.barra-reply-fechar {
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #6B7280;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.barra-reply-fechar:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #111827;
+}
+
+/* Efeito de flash / pulsar ao navegar até a mensagem citada */
+.msg-destaque-piscar {
+  animation: piscarHighlight 1.5s ease-out;
+}
+@keyframes piscarHighlight {
+  0% { transform: scale(1.03); filter: drop-shadow(0 0 10px rgba(47, 128, 237, 0.65)); }
+  40% { transform: scale(1.01); filter: drop-shadow(0 0 6px rgba(47, 128, 237, 0.35)); }
+  100% { transform: scale(1); filter: none; }
 }
 
 /* Menu seletor de reações */
