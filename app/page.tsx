@@ -617,6 +617,7 @@ export default function Home() {
   const [codigo, setCodigo] = useState("");
   const [salaCriada, setSalaCriada] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [copiadoSala, setCopiadoSala] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [texto, setTexto] = useState("");
   const [fotosAnexadas, setFotosAnexadas] = useState<string[]>([]);
@@ -1277,6 +1278,24 @@ export default function Home() {
     setCopiado(true);
   }
 
+  // copia o link da sala de dentro da sala (sem sair de nada)
+  async function copiarLinkDaSala() {
+    if (!sala) return;
+    const link = `${window.location.origin}/?r=${sala}`;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      const tmp = document.createElement("textarea");
+      tmp.value = link;
+      document.body.appendChild(tmp);
+      tmp.select();
+      document.execCommand("copy");
+      document.body.removeChild(tmp);
+    }
+    setCopiadoSala(true);
+    setTimeout(() => setCopiadoSala(false), 1800);
+  }
+
   function avisarDigitando(estaDigitando: boolean) {
     if (!canalRef.current || !nome) return;
     canalRef.current.send({
@@ -1431,8 +1450,18 @@ export default function Home() {
           <span className="header-titulo">nosso bloco</span>
           <div className="header-subtitulo">
             <span className="header-online-dot" />
+            {sala && (
+              <button
+                type="button"
+                className={`header-codigo-sala ${copiadoSala ? "copiado" : ""}`}
+                onClick={copiarLinkDaSala}
+                title="Copiar link da sala"
+              >
+                {copiadoSala ? "link copiado!" : `#${sala}`}
+              </button>
+            )}
             <span className="header-online-status">
-              {sala ? `#${sala.slice(0, 7)} • ` : ""}{usuariosOnline.length <= 1 ? "online agora" : `${usuariosOnline.length} online`}
+              {sala ? "• " : ""}{usuariosOnline.length <= 1 ? "online agora" : `${usuariosOnline.length} online`}
             </span>
           </div>
         </div>
