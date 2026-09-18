@@ -453,11 +453,14 @@ export default function Home() {
   const [buscaAtiva, setBuscaAtiva] = useState(false);
   const [termoBusca, setTermoBusca] = useState("");
   const [resultadoIndex, setResultadoIndex] = useState(0);
+  const [mostrarBotaoDescer, setMostrarBotaoDescer] = useState(false);
+  const [novasMensagensAbaixo, setNovasMensagensAbaixo] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileDocInputRef = useRef<HTMLInputElement>(null);
   const inputMsgRef = useRef<HTMLInputElement>(null);
   const inputBuscaRef = useRef<HTMLInputElement>(null);
+  const msgsContainerRef = useRef<HTMLDivElement>(null);
   const fim = useRef<HTMLDivElement>(null);
   const sb = useRef<SupabaseClient | null>(null);
   const canalRef = useRef<ReturnType<SupabaseClient["channel"]> | null>(null);
@@ -603,6 +606,23 @@ export default function Home() {
     const ant = (resultadoIndex - 1 + resultadosBusca.length) % resultadosBusca.length;
     setResultadoIndex(ant);
     navegarAteMensagem(resultadosBusca[ant]);
+  }
+
+  function rolarParaOFim() {
+    fim.current?.scrollIntoView({ behavior: "smooth" });
+    setNovasMensagensAbaixo(0);
+    setMostrarBotaoDescer(false);
+  }
+
+  function handleScrollMsgs() {
+    if (!msgsContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = msgsContainerRef.current;
+    const distDoFim = scrollHeight - scrollTop - clientHeight;
+    const longe = distDoFim > 140;
+    setMostrarBotaoDescer(longe);
+    if (!longe) {
+      setNovasMensagensAbaixo(0);
+    }
   }
 
   // Fecha o menu de reações ao clicar fora
@@ -769,8 +789,32 @@ export default function Home() {
 
   // rola pro fim quando chega mensagem ou alguém está digitando
   useEffect(() => {
-    fim.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs, digitando]);
+    if (!msgsContainerRef.current) {
+      fim.current?.scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    const { scrollTop, scrollHeight, clientHeight } = msgsContainerRef.current;
+    const distDoFim = scrollHeight - scrollTop - clientHeight;
+    const ultimaMsg = msgs[msgs.length - 1];
+    const souEu = ultimaMsg?.author === nome;
+
+    if (distDoFim <= 180 || souEu) {
+      fim.current?.scrollIntoView({ behavior: "smooth" });
+      setNovasMensagensAbaixo(0);
+      setMostrarBotaoDescer(false);
+    } else {
+      setNovasMensagensAbaixo((n) => n + 1);
+      setMostrarBotaoDescer(true);
+    }
+  }, [msgs, nome]);
+
+  useEffect(() => {
+    if (!msgsContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = msgsContainerRef.current;
+    if (scrollHeight - scrollTop - clientHeight <= 180) {
+      fim.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [digitando]);
 
   // colar imagem da área de transferência (Ctrl+V / Cmd+V) e fechar lightbox com Esc
   useEffect(() => {
@@ -1366,7 +1410,7 @@ export default function Home() {
         </div>
       ) : (
         <>
-          <div className="msgs">
+          <div className="msgs" ref={msgsContainerRef} onScroll={handleScrollMsgs}>
             {msgs.map((m) => {
               const parsed = parseContent(m.content);
               const souEu = m.author === nome;
@@ -1569,6 +1613,26 @@ export default function Home() {
             )}
             <div ref={fim} />
           </div>
+
+          {/* Botão flutuante para descer até a última mensagem */}
+          {mostrarBotaoDescer && (
+            <button
+              type="button"
+              className="btn-descer-fim"
+              onClick={rolarParaOFim}
+              title="Ir para a última mensagem"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <polyline points="19 12 12 19 5 12" />
+              </svg>
+              {novasMensagensAbaixo > 0 && (
+                <span className="badge-novas-msgs">
+                  {novasMensagensAbaixo > 99 ? "99+" : novasMensagensAbaixo}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Barra ativa de citação (Respondendo a ...) */}
           {respondendoA && (
