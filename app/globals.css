@@ -248,32 +248,78 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Bolhas de mensagens com fotos */
-.msg-foto {
-  padding: 5px !important;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+/* Bolhas de fotos sem borda (Borderless Images) */
+.msg-foto-borda-livre {
+  position: relative;
+  max-width: 100%;
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  line-height: 0;
+  display: block;
+}
+.msg-foto-container {
+  position: relative;
+  display: inline-block;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.09);
+  line-height: 0;
 }
 .msg-foto-img {
   width: 100%;
   max-width: 320px;
   max-height: 380px;
   object-fit: cover;
-  border-radius: 17px;
   display: block;
   cursor: pointer;
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
 .msg-foto-img:hover {
-  opacity: 0.94;
+  opacity: 0.95;
 }
-.msg-foto-legenda {
-  padding: 4px 10px 6px;
-  font-size: 15px;
+.msg-foto-img.borda-zero {
+  border-radius: 18px;
+}
+.foto-hora-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #FFFFFF;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  line-height: 1;
+  pointer-events: none;
+  letter-spacing: 0.2px;
+}
+
+/* Bolha de foto com legenda */
+.msg-foto.com-legenda {
+  padding: 0 !important;
+  overflow: hidden;
+  border-radius: 18px;
+  max-width: 320px;
+}
+.msg-foto.com-legenda .msg-foto-img {
+  border-radius: 18px 18px 0 0;
+  max-width: 320px;
+  max-height: 340px;
+}
+.msg-foto.com-legenda .msg-foto-legenda {
+  padding: 8px 12px 2px;
+  font-size: 14.5px;
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.msg-foto.com-legenda .foto-hora {
+  padding: 0 12px 6px;
 }
 
 /* Preview da foto antes de enviar */
@@ -662,18 +708,32 @@ body {
   color: #2F80ED;
 }
 
-/* Player de áudio minimalista */
-.audio-player {
+/* ==========================================================================
+   Player de Áudio Enxuto (Slim Audio Bubble)
+   ========================================================================== */
+.msg-audio {
+  padding: 4px 12px 4px 5px !important;
+  border-radius: 999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.audio-player-enxuto {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 210px;
-  max-width: 280px;
-  padding: 4px 2px;
+  gap: 9px;
+  width: 175px;
+  user-select: none;
 }
-.audio-btn-play {
-  width: 36px;
-  height: 36px;
+@media (min-width: 480px) {
+  .audio-player-enxuto {
+    width: 195px;
+  }
+}
+
+.audio-btn-play-enxuto {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: none;
   display: flex;
@@ -681,53 +741,78 @@ body {
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  transition: transform 0.1s ease;
-}
-.eu .audio-btn-play {
   background: #2F80ED;
   color: #FFFFFF;
+  transition: transform 0.1s ease, filter 0.15s ease;
 }
-.ela .audio-btn-play {
-  background: #E5E7EB;
-  color: #1F2937;
+.audio-btn-play-enxuto:hover {
+  filter: brightness(1.08);
 }
-.audio-btn-play:active {
-  transform: scale(0.94);
+.audio-btn-play-enxuto:active {
+  transform: scale(0.92);
 }
-.audio-corpo {
+
+.audio-col-dados {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
+  justify-content: center;
 }
-.audio-barra-wrap {
+
+.audio-barra-track {
   width: 100%;
-  height: 12px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-}
-.audio-barra-fundo {
-  width: 100%;
-  height: 5px;
+  height: 4px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.08);
-  overflow: hidden;
   position: relative;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.1);
 }
-.audio-barra-progresso {
+.audio-eu .audio-barra-track {
+  background: rgba(47, 128, 237, 0.22);
+}
+.audio-barra-track::before {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
+}
+.audio-barra-progresso-enxuto {
   height: 100%;
   border-radius: 999px;
   background: #2F80ED;
   transition: width 0.08s linear;
 }
-.audio-info {
+
+.audio-meta-enxuto {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  line-height: 1;
+}
+
+.audio-tempo-enxuto {
+  font-size: 10.5px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   opacity: 0.7;
+}
+.audio-eu .audio-tempo-enxuto {
+  color: #2F80ED;
+}
+.audio-ela .audio-tempo-enxuto {
+  color: #6B7280;
+}
+
+.audio-hora-enxuto {
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.65;
+}
+.audio-eu .audio-hora-enxuto {
+  color: #2F80ED;
+}
+.audio-ela .audio-hora-enxuto {
+  color: #8E95A0;
 }
 
 /* Gravação de áudio no input bar */

@@ -84,7 +84,17 @@ function formatTempo(s: number) {
   return `${mins}:${segs < 10 ? "0" : ""}${segs}`;
 }
 
-function AudioPlayer({ src, duration, souEu }: { src: string; duration?: number; souEu: boolean }) {
+function AudioPlayer({
+  src,
+  duration,
+  souEu,
+  hora,
+}: {
+  src: string;
+  duration?: number;
+  souEu: boolean;
+  hora?: string;
+}) {
   const [tocando, setTocando] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [tempoAtual, setTempoAtual] = useState(0);
@@ -126,22 +136,27 @@ function AudioPlayer({ src, duration, souEu }: { src: string; duration?: number;
   }
 
   return (
-    <div className={`audio-player ${souEu ? "audio-eu" : "audio-ela"}`}>
-      <button type="button" className="audio-btn-play" onClick={togglePlay} title={tocando ? "Pausar" : "Tocar"}>
+    <div className={`audio-player-enxuto ${souEu ? "audio-eu" : "audio-ela"}`}>
+      <button
+        type="button"
+        className="audio-btn-play-enxuto"
+        onClick={togglePlay}
+        title={tocando ? "Pausar" : "Tocar"}
+      >
         {tocando ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
             <rect x="6" y="4" width="4" height="16" rx="1.5" />
             <rect x="14" y="4" width="4" height="16" rx="1.5" />
           </svg>
         ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: "1.5px" }}>
             <path d="M6 4l14 8-14 8V4z" />
           </svg>
         )}
       </button>
-      <div className="audio-corpo">
+      <div className="audio-col-dados">
         <div
-          className="audio-barra-wrap"
+          className="audio-barra-track"
           onClick={(e) => {
             if (!audioRef.current || !duracaoTotal) return;
             const rect = e.currentTarget.getBoundingClientRect();
@@ -150,13 +165,13 @@ function AudioPlayer({ src, duration, souEu }: { src: string; duration?: number;
             audioRef.current.currentTime = ratio * duracaoTotal;
           }}
         >
-          <div className="audio-barra-fundo">
-            <div className="audio-barra-progresso" style={{ width: `${progresso}%` }} />
-          </div>
+          <div className="audio-barra-progresso-enxuto" style={{ width: `${progresso}%` }} />
         </div>
-        <div className="audio-info">
-          <span>{formatTempo(tempoAtual > 0 ? tempoAtual : duracaoTotal)}</span>
-          <span>🎙️</span>
+        <div className="audio-meta-enxuto">
+          <span className="audio-tempo-enxuto">
+            {formatTempo(tempoAtual > 0 ? tempoAtual : duracaoTotal)}
+          </span>
+          {hora && <span className="audio-hora-enxuto">{hora}</span>}
         </div>
       </div>
     </div>
@@ -899,23 +914,40 @@ export default function Home() {
 
                     {/* Conteúdo da bolha */}
                     {parsed.type === "image" && parsed.image ? (
-                      <div className={`msg msg-foto ${souEu ? "eu" : "ela"}`}>
-                        <img
-                          src={parsed.image}
-                          alt="Foto enviada"
-                          className="msg-foto-img"
-                          onLoad={() => fim.current?.scrollIntoView()}
-                          onClick={() => setFotoAmpliada(parsed.image!)}
-                        />
-                        {parsed.text ? <div className="msg-foto-legenda">{parsed.text}</div> : null}
-                        <span className="msg-hora foto-hora">{formatarHora(m.created_at)}</span>
-                      </div>
-                    ) : parsed.type === "audio" && parsed.audio ? (
-                      <div className={`msg ${souEu ? "eu" : "ela"}`}>
-                        <div className="msg-conteudo">
-                          <AudioPlayer src={parsed.audio} duration={parsed.duration} souEu={souEu} />
-                          <span className="msg-hora">{formatarHora(m.created_at)}</span>
+                      parsed.text ? (
+                        <div className={`msg msg-foto com-legenda ${souEu ? "eu" : "ela"}`}>
+                          <img
+                            src={parsed.image}
+                            alt="Foto enviada"
+                            className="msg-foto-img"
+                            onLoad={() => fim.current?.scrollIntoView()}
+                            onClick={() => setFotoAmpliada(parsed.image!)}
+                          />
+                          <div className="msg-foto-legenda">{parsed.text}</div>
+                          <span className="msg-hora foto-hora">{formatarHora(m.created_at)}</span>
                         </div>
+                      ) : (
+                        <div className={`msg-foto-borda-livre ${souEu ? "eu" : "ela"}`}>
+                          <div className="msg-foto-container">
+                            <img
+                              src={parsed.image}
+                              alt="Foto enviada"
+                              className="msg-foto-img borda-zero"
+                              onLoad={() => fim.current?.scrollIntoView()}
+                              onClick={() => setFotoAmpliada(parsed.image!)}
+                            />
+                            <span className="foto-hora-badge">{formatarHora(m.created_at)}</span>
+                          </div>
+                        </div>
+                      )
+                    ) : parsed.type === "audio" && parsed.audio ? (
+                      <div className={`msg msg-audio ${souEu ? "eu" : "ela"}`}>
+                        <AudioPlayer
+                          src={parsed.audio}
+                          duration={parsed.duration}
+                          souEu={souEu}
+                          hora={formatarHora(m.created_at)}
+                        />
                       </div>
                     ) : (
                       <div className={`msg ${souEu ? "eu" : "ela"}`}>
