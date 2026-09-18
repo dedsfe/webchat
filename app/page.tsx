@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 type Msg = { id: string; author: string; content: string; created_at: string };
@@ -22,6 +22,15 @@ type ReplyInfo = {
   type?: "text" | "image" | "audio" | "file";
 };
 
+export type LinkPreview = {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+  favicon?: string;
+};
+
 type ParsedMsg = {
   type: "text" | "image" | "audio" | "file";
   text?: string;
@@ -32,6 +41,7 @@ type ParsedMsg = {
   file?: FileInfo;
   reactions?: Record<string, string[]>;
   replyTo?: ReplyInfo;
+  linkPreview?: LinkPreview;
 };
 
 function parseContent(content: string): ParsedMsg {
@@ -61,6 +71,7 @@ function parseContent(content: string): ParsedMsg {
           file: parsed.file as FileInfo | undefined,
           reactions: parsed.reactions,
           replyTo: parsed.replyTo as ReplyInfo | undefined,
+          linkPreview: parsed.linkPreview as LinkPreview | undefined,
         };
       }
     } catch {
@@ -133,6 +144,178 @@ function CardArquivo({
           <line x1="12" y1="15" x2="12" y2="3" />
         </svg>
       </button>
+    </div>
+  );
+}
+
+const previewCache = new Map<string, LinkPreview | null>();
+
+function extrairPrimeiroLink(texto?: string): string | null {
+  if (!texto) return null;
+  const match = texto.match(/https?:\/\/[^\s<>"']+/i);
+  if (!match) return null;
+  return match[0].replace(/[.,;!?)]+$/, "");
+}
+
+function prefetchLinkPreview(url: string) {
+  const urlLimpa = url.replace(/[.,;!?)]+$/, "");
+  if (!urlLimpa || previewCache.has(urlLimpa)) return;
+  fetch(`/api/preview?url=${encodeURIComponent(urlLimpa)}`)
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data: LinkPreview | null) => {
+      if (data) previewCache.set(urlLimpa, data);
+    })
+    .catch(() => {});
+}
+
+function renderizarTextoComLinks(texto?: string) {
+  if (!texto) return null;
+  const partes = texto.split(/(https?:\/\/[^\s<>"']+)/g);
+  return partes.map((parte, i) => {
+    if (parte.match(/^https?:\/\//i)) {
+      const matchPunct = parte.match(/^(.+?)([.,;!?)]+)$/);
+      const urlEfetiva = matchPunct ? matchPunct[1] : parte;
+      const pontuacaoExtra = matchPunct ? matchPunct[2] : "";
+
+      return (
+        <span key={i}>
+          <a
+            href={urlEfetiva}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="msg-link"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {urlEfetiva}
+          </a>
+          {pontuacaoExtra}
+        </span>
+      );
+    }
+    return <span key={i}>{parte}</span>;
+  });
+}
+
+function CardLinkPreview({
+  previewProp,
+  url,
+  souEu,
+}: {
+  previewProp?: LinkPreview;
+  url: string;
+  souEu: boolean;
+}) {
+  const urlLimpa = url.replace(/[.,;!?)]+$/, "");
+  const [preview, setPreview] = useState<LinkPreview | null>(() => previewProp || previewCache.get(urlLimpa) || null);
+  const [carregando, setCarregando] = useState(!previewProp && !previewCache.has(urlLimpa));
+
+  useEffect(() => {
+    if (previewProp) {
+      previewCache.set(urlLimpa, previewProp);
+      setPreview(previewProp);
+      setCarregando(false);
+      return;
+    }
+    if (previewCache.has(urlLimpa)) {
+      setPreview(previewCache.get(urlLimpa) || null);
+      setCarregando(false);
+      return;
+    }
+
+    let ativo = true;
+    setCarregando(true);
+    fetch(`/api/preview?url=${encodeURIComponent(urlLimpa)}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Falha no preview");
+        return res.json();
+      })
+      .then((data: LinkPreview) => {
+        if (!ativo) return;
+        previewCache.set(urlLimpa, data);
+        setPreview(data);
+        setCarregando(false);
+      })
+      .catch(() => {
+        if (!ativo) return;
+        try {
+          const u = new URL(urlLimpa);
+          const fallbackData: LinkPreview = {
+            url: urlLimpa,
+            siteName: u.hostname.replace(/^www\./, ""),
+            favicon: `https://www.google.com/s2/favicons?domain=${u.hostname}&sz=64`,
+          };
+          previewCache.set(urlLimpa, fallbackData);
+          setPreview(fallbackData);
+        } catch {
+          previewCache.set(urlLimpa, null);
+          setPreview(null);
+        }
+        setCarregando(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, [urlLimpa, previewProp]);
+
+  if (carregando) {
+    return (
+      <div className={`card-link-preview preview-carregando ${souEu ? "preview-eu" : "preview-ela"}`}>
+        <div className="preview-skeleton-linha" />
+        <div className="preview-skeleton-linha curta" />
+      </div>
+    );
+  }
+
+  if (!preview) return null;
+  if (!preview.title && !preview.image && !preview.siteName) return null;
+
+  const abrirLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(preview.url || urlLimpa, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <div
+      className={`card-link-preview ${souEu ? "preview-eu" : "preview-ela"}`}
+      onClick={abrirLink}
+      role="button"
+      tabIndex={0}
+      title={`Abrir ${preview.url || urlLimpa}`}
+    >
+      {preview.image && (
+        <div className="preview-banner-wrap">
+          <img
+            src={preview.image}
+            alt={preview.title || "Imagem de capa do link"}
+            className="preview-banner-img"
+            loading="lazy"
+            onError={(e) => {
+              (e.currentTarget.parentElement as HTMLElement)?.style.setProperty("display", "none");
+            }}
+          />
+        </div>
+      )}
+      <div className="preview-info">
+        {(preview.siteName || preview.favicon) && (
+          <div className="preview-site-linha">
+            {preview.favicon && (
+              <img
+                src={preview.favicon}
+                alt=""
+                className="preview-favicon"
+                loading="lazy"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = "none";
+                }}
+              />
+            )}
+            <span className="preview-site-nome">{preview.siteName}</span>
+          </div>
+        )}
+        {preview.title && <div className="preview-titulo">{preview.title}</div>}
+        {preview.description && <div className="preview-desc">{preview.description}</div>}
+      </div>
     </div>
   );
 }
@@ -692,8 +875,8 @@ export default function Home() {
 
   // carrega histórico + escuta mensagens, presença e typing em tempo real
   useEffect(() => {
-    if (!sala || !URL || !KEY) return;
-    const client = createClient(URL, KEY);
+    if (!sala || !SUPABASE_URL || !KEY) return;
+    const client = createClient(SUPABASE_URL, KEY);
     sb.current = client;
 
     // carrega mensagem fixada salva
@@ -1103,7 +1286,13 @@ export default function Home() {
   }
 
   function handleTextoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setTexto(e.target.value);
+    const val = e.target.value;
+    setTexto(val);
+    const linkDetectado = extrairPrimeiroLink(val);
+    if (linkDetectado) {
+      prefetchLinkPreview(linkDetectado);
+    }
+
     if (!nome) return;
 
     const now = Date.now();
@@ -1128,6 +1317,9 @@ export default function Home() {
     const rep = respondendoA;
     setRespondendoA(null);
 
+    const linkEncontrado = extrairPrimeiroLink(textoLimpo);
+    const linkPreviewPre = linkEncontrado ? previewCache.get(linkEncontrado) || undefined : undefined;
+
     const conteudo = fotosAnexadas.length > 0
       ? JSON.stringify({
           type: "image",
@@ -1135,12 +1327,14 @@ export default function Home() {
           images: fotosAnexadas,
           text: textoLimpo,
           replyTo: rep || undefined,
+          linkPreview: linkPreviewPre,
         })
-      : rep
+      : rep || linkPreviewPre
       ? JSON.stringify({
           type: "text",
           text: textoLimpo,
-          replyTo: rep,
+          replyTo: rep || undefined,
+          linkPreview: linkPreviewPre,
         })
       : textoLimpo;
 
@@ -1516,7 +1710,18 @@ export default function Home() {
                                 onAmpliar={(idx) => abrirLightbox(imagesList, idx)}
                               />
                             </div>
-                            {parsed.text ? <div className="msg-foto-legenda">{parsed.text}</div> : null}
+                            {parsed.text ? <div className="msg-foto-legenda">{renderizarTextoComLinks(parsed.text)}</div> : null}
+                            {(() => {
+                              const link = extrairPrimeiroLink(parsed.text);
+                              if (!link) return null;
+                              return (
+                                <CardLinkPreview
+                                  previewProp={parsed.linkPreview}
+                                  url={link}
+                                  souEu={souEu}
+                                />
+                              );
+                            })()}
                             <span className="msg-hora foto-hora">{formatarHora(m.created_at)}</span>
                           </div>
                         ) : (
@@ -1570,7 +1775,18 @@ export default function Home() {
                           {parsed.replyTo && (
                             <MsgQuote replyTo={parsed.replyTo} nomeUsuario={nome} onNavigate={navegarAteMensagem} />
                           )}
-                          <div className="msg-texto-corpo">{parsed.text}</div>
+                          <div className="msg-texto-corpo">{renderizarTextoComLinks(parsed.text)}</div>
+                          {(() => {
+                            const link = extrairPrimeiroLink(parsed.text);
+                            if (!link) return null;
+                            return (
+                              <CardLinkPreview
+                                previewProp={parsed.linkPreview}
+                                url={link}
+                                souEu={souEu}
+                              />
+                            );
+                          })()}
                           <span className="msg-hora">{formatarHora(m.created_at)}</span>
                         </div>
                       </div>
