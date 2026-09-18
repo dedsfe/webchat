@@ -36,21 +36,20 @@ html, body {
 
 .bloco {
   width: 100%;
-  max-width: 860px;
+  max-width: none;
   height: 100%;
   height: 100dvh;
   background: #FFFFFF;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  margin: 0 auto;
+  margin: 0;
   position: relative;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.05);
+  box-shadow: none;
 }
 
 @media (max-width: 860px) {
   .bloco {
-    max-width: 100%;
     box-shadow: none;
   }
 }
@@ -1177,7 +1176,7 @@ html, body {
   padding: 0 8px 4px;
 }
 
-/* Ações da Mensagem: No Desktop surgem suavemente no hover. No Mobile/Touch ficam 100% ocultas para não poluir a tela */
+/* Desktop: atalhos discretos ficam próximos à mensagem e aparecem no hover. */
 .msg-acoes-wrap {
   display: flex;
   align-items: center;
@@ -1188,14 +1187,93 @@ html, body {
   pointer-events: none;
   transition: opacity 0.15s ease;
 }
-.msg-wrap:hover .msg-acoes-wrap {
+.msg-wrap:hover .msg-acoes-wrap,
+.msg-wrap:focus-within .msg-acoes-wrap {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* Estes elementos só existem na composição de celular. */
+.btn-msg-mais-mobile,
+.acoes-mobile {
+  display: none;
 }
 
 @media (hover: none), (max-width: 768px) {
   .msg-acoes-wrap {
     display: none !important;
+  }
+
+  .msg-wrap {
+    max-width: calc(100% - 12px);
+  }
+
+  .msg-linha {
+    align-items: center;
+    gap: 3px;
+  }
+
+  .btn-msg-mais-mobile {
+    width: 34px;
+    height: 34px;
+    border: none;
+    background: transparent;
+    color: #636366;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 34px;
+    cursor: pointer;
+    border-radius: 10px;
+  }
+
+  .btn-msg-mais-mobile:active {
+    background: rgba(60, 60, 67, 0.1);
+    color: var(--ios-blue);
+  }
+
+  .acoes-mobile {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: max-content;
+    max-width: 100%;
+    margin-top: 6px;
+    overflow: visible;
+    background: #F2F2F7;
+    border: 1px solid rgba(60, 60, 67, 0.1);
+    border-radius: 13px;
+  }
+
+  .wrap-eu .acoes-mobile {
+    align-self: flex-end;
+  }
+
+  .wrap-ela .acoes-mobile {
+    align-self: flex-start;
+  }
+
+  .btn-acao-mobile {
+    min-height: 38px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: #3A3A3C;
+    font: 600 13px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    padding: 0 11px;
+    cursor: pointer;
+  }
+
+  .btn-acao-mobile:active,
+  .btn-acao-mobile.ativo {
+    background: rgba(0, 122, 255, 0.12);
+    color: var(--ios-blue);
+  }
+
+  .seletor-reacoes-mobile {
+    right: 0;
+    left: auto !important;
+    bottom: calc(100% + 7px);
   }
 }
 
@@ -1974,7 +2052,69 @@ html, body {
   text-align: center;
 }
 
+/* Desktop: tela contínua, sem moldura lateral. O respiro vem apenas dos gutters
+   internos que protegem as mensagens e o campo de escrita. */
+@media (min-width: 769px) {
+  html, body {
+    background: #FFFFFF;
+  }
 
+  .bloco {
+    max-width: none;
+    box-shadow: none;
+    border: none;
+  }
 
+  .app-header-nativo {
+    height: calc(56px + var(--safe-top));
+    padding-inline: 24px;
+  }
 
+  .header-esq,
+  .header-dir {
+    min-width: 120px;
+  }
 
+  .msgs {
+    padding: 22px clamp(24px, 4vw, 64px);
+    gap: 10px;
+  }
+
+  .msg-wrap {
+    max-width: 74%;
+  }
+
+  .msg-linha {
+    max-width: 100%;
+  }
+
+  .wrap-eu .msg-linha {
+    flex-direction: row;
+  }
+
+  .msg-acoes-wrap {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 4;
+  }
+
+  .wrap-eu .msg-acoes-wrap {
+    left: calc(100% + 9px);
+  }
+
+  .wrap-ela .msg-acoes-wrap {
+    right: calc(100% + 9px);
+  }
+
+  .input-bar {
+    max-width: 100%;
+    padding: 9px clamp(24px, 4vw, 64px) 7px;
+  }
+
+  .preview-fotos-barra,
+  .barra-reply-wrap {
+    max-width: 100%;
+    padding-inline: clamp(24px, 4vw, 64px);
+  }
+}

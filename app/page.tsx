@@ -629,6 +629,7 @@ export default function Home() {
   const [naoLidas, setNaoLidas] = useState(0);
 
   const [seletorAbertoId, setSeletorAbertoId] = useState<string | null>(null);
+  const [acaoMobileAbertaId, setAcaoMobileAbertaId] = useState<string | null>(null);
   const [gravando, setGravando] = useState(false);
   const [gravandoTempo, setGravandoTempo] = useState(0);
   const [respondendoA, setRespondendoA] = useState<ReplyInfo | null>(null);
@@ -1626,7 +1627,6 @@ export default function Home() {
                   id={`msg-${m.id}`}
                   className={`msg-wrap ${souEu ? "wrap-eu" : "wrap-ela"} ${isResultadoBuscaAtivo ? "msg-resultado-ativo" : isResultadoBusca ? "msg-resultado-encontrado" : ""} ${isFixada ? "msg-esta-fixada" : ""}`}
                   onDoubleClick={() => iniciarResposta(m)}
-                  title="Duplo clique para responder"
                 >
                   <div className="msg-linha">
                     {/* Ações da mensagem (Responder + Fixar + Reagir) */}
@@ -1791,7 +1791,86 @@ export default function Home() {
                         </div>
                       </div>
                     )}
+
+                    {/* O hover não existe no celular. Este acionador mantém as
+                        mesmas ações disponíveis sem ocupar a conversa inteira. */}
+                    <button
+                      type="button"
+                      className="btn-msg-mais-mobile"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSeletorAbertoId(null);
+                        setAcaoMobileAbertaId((id) => id === m.id ? null : m.id);
+                      }}
+                      aria-label="Abrir ações da mensagem"
+                      aria-expanded={acaoMobileAbertaId === m.id}
+                      aria-controls={`acoes-mensagem-${m.id}`}
+                      title="Ações da mensagem"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                        <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" />
+                        <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+                        <circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
+                      </svg>
+                    </button>
                   </div>
+
+                  {acaoMobileAbertaId === m.id && (
+                    <div
+                      id={`acoes-mensagem-${m.id}`}
+                      className="acoes-mobile"
+                      role="group"
+                      aria-label="Ações da mensagem"
+                    >
+                      <button
+                        type="button"
+                        className="btn-acao-mobile"
+                        onClick={() => {
+                          iniciarResposta(m);
+                          setAcaoMobileAbertaId(null);
+                        }}
+                      >
+                        Responder
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn-acao-mobile ${isFixada ? "ativo" : ""}`}
+                        onClick={() => {
+                          fixarMensagem(isFixada ? null : m.id);
+                          setAcaoMobileAbertaId(null);
+                        }}
+                      >
+                        {isFixada ? "Desafixar" : "Fixar"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-acao-mobile"
+                        onClick={() => setSeletorAbertoId((id) => id === m.id ? null : m.id)}
+                        aria-expanded={seletorAbertoId === m.id}
+                      >
+                        Reagir
+                      </button>
+
+                      {seletorAbertoId === m.id && (
+                        <div className="seletor-reacoes seletor-reacoes-mobile" onClick={(e) => e.stopPropagation()}>
+                          {emojis.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              className="seletor-emoji-btn"
+                              onClick={() => {
+                                toggleReacao(m.id, emoji);
+                                setSeletorAbertoId(null);
+                                setAcaoMobileAbertaId(null);
+                              }}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Badges de reações abaixo da mensagem */}
                   {temReacoes && (
