@@ -1233,11 +1233,11 @@ export default function Home() {
         </div>
 
         <div className="header-centro">
-          <span className="header-titulo">{sala ? `sala ${sala.slice(0, 8)}` : "nosso bloco"}</span>
+          <span className="header-titulo">nosso bloco</span>
           <div className="header-subtitulo">
             <span className="header-online-dot" />
             <span className="header-online-status">
-              {usuariosOnline.length <= 1 ? "só você online" : `${usuariosOnline.length} online`}
+              {sala ? `#${sala.slice(0, 7)} • ` : ""}{usuariosOnline.length <= 1 ? "online agora" : `${usuariosOnline.length} online`}
             </span>
           </div>
         </div>
@@ -1762,7 +1762,7 @@ export default function Home() {
 
                 <button
                   type="button"
-                  className="btn-foto"
+                  className="btn-input-acao"
                   onClick={() => fileInputRef.current?.click()}
                   title="Enviar fotos"
                   disabled={processandoFoto}
@@ -1770,7 +1770,7 @@ export default function Home() {
                   {processandoFoto ? (
                     <span className="spinner" />
                   ) : (
-                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="4" ry="4" />
                       <circle cx="8.5" cy="8.5" r="1.5" />
                       <polyline points="21 15 16 10 5 21" />
@@ -1781,29 +1781,13 @@ export default function Home() {
                 {/* Botão de anexo de arquivos e documentos */}
                 <button
                   type="button"
-                  className="btn-foto btn-anexo"
+                  className="btn-input-acao btn-anexo"
                   onClick={() => fileDocInputRef.current?.click()}
-                  title="Enviar arquivo ou documento"
+                  title="Enviar documento"
                   disabled={processandoFoto}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
-                </button>
-
-                {/* Botão de gravação de áudio */}
-                <button
-                  type="button"
-                  className="btn-foto btn-mic"
-                  onClick={iniciarGravacao}
-                  title="Gravar áudio"
-                  disabled={processandoFoto}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
                   </svg>
                 </button>
 
@@ -1825,11 +1809,28 @@ export default function Home() {
                   }
                 />
 
-                <button className="enviar" onClick={enviar} disabled={(!texto.trim() && fotosAnexadas.length === 0) || processandoFoto}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
+                {texto.trim() || fotosAnexadas.length > 0 ? (
+                  <button className="enviar" onClick={enviar} disabled={processandoFoto} title="Enviar mensagem">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-mic-nativo"
+                    onClick={iniciarGravacao}
+                    title="Gravar áudio"
+                    disabled={processandoFoto}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                      <line x1="8" y1="23" x2="16" y2="23" />
+                    </svg>
+                  </button>
+                )}
               </div>
             )}
           </div>

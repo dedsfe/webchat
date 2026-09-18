@@ -320,7 +320,7 @@ html, body {
 }
 
 /* Botões de Ação na barra de input */
-.btn-foto, .btn-mic, .btn-anexo {
+.btn-foto, .btn-mic, .btn-anexo, .btn-input-acao, .btn-mic-nativo {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -334,12 +334,16 @@ html, body {
   flex-shrink: 0;
   transition: all 0.15s ease;
 }
-.btn-foto:active, .btn-mic:active, .btn-anexo:active {
+.btn-mic-nativo {
+  background: rgba(142, 142, 147, 0.12);
+  color: #1C1C1E;
+}
+.btn-foto:active, .btn-mic:active, .btn-anexo:active, .btn-input-acao:active, .btn-mic-nativo:active {
   transform: scale(0.9);
   color: #007AFF;
   background: rgba(0, 122, 255, 0.1);
 }
-.btn-foto:disabled, .btn-mic:disabled, .btn-anexo:disabled {
+.btn-foto:disabled, .btn-mic:disabled, .btn-anexo:disabled, .btn-input-acao:disabled, .btn-mic-nativo:disabled {
   opacity: 0.4;
   cursor: default;
 }
@@ -969,55 +973,70 @@ html, body {
   flex-direction: row-reverse;
 }
 
-/* Ajustes na bolha */
-.msg {
-  width: fit-content;
-  max-width: 100%;
-}
+/* Conteúdo da Bolha de Mensagem */
 .msg-conteudo {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 8px;
 }
+
 .msg-texto-corpo {
+  flex: 1 1 auto;
   white-space: pre-wrap;
   word-break: break-word;
+  font-size: 15.5px;
+  line-height: 1.36;
 }
 
 /* Horário da mensagem */
 .msg-hora {
   font-size: 10.5px;
-  font-weight: 500;
-  margin-top: 4px;
-  align-self: flex-end;
-  opacity: 0.65;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  margin-bottom: 1px;
   user-select: none;
-  line-height: 1;
+  flex-shrink: 0;
 }
 .eu .msg-hora {
-  color: #2F80ED;
+  color: rgba(255, 255, 255, 0.75) !important;
 }
 .ela .msg-hora {
-  color: #8E95A0;
+  color: #8E8E93 !important;
 }
 .foto-hora {
   padding: 0 8px 4px;
 }
 
-/* ==========================================================================
-   Ações da Mensagem (Responder + Reagir com Emoji)
-   ========================================================================== */
+/* Ações da Mensagem: No Desktop surgem suavemente no hover. No Mobile/Touch ficam 100% ocultas para não poluir a tela */
 .msg-acoes-wrap {
   display: flex;
   align-items: center;
   gap: 4px;
   position: relative;
   flex-shrink: 0;
-}
-.btn-msg-acao {
   opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.msg-wrap:hover .msg-acoes-wrap {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none), (max-width: 768px) {
+  .msg-acoes-wrap {
+    display: none !important;
+  }
+}
+
+.btn-msg-acao {
   border: none;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  border: 0.5px solid rgba(60, 60, 67, 0.15);
   border-radius: 50%;
   width: 26px;
   height: 26px;
@@ -1025,23 +1044,14 @@ html, body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  transition: opacity 0.15s ease, transform 0.12s ease, background 0.15s ease, color 0.15s ease;
-  color: #4B5563;
-}
-.msg-wrap:hover .btn-msg-acao {
-  opacity: 0.85;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition: all 0.12s ease;
+  color: #636366;
 }
 .btn-msg-acao:hover {
-  opacity: 1;
-  transform: scale(1.15);
-  color: #2F80ED;
+  transform: scale(1.12);
+  color: var(--ios-blue);
   background: #FFFFFF;
-}
-@media (hover: none) {
-  .btn-msg-acao {
-    opacity: 0.55;
-  }
 }
 
 /* Card de citação / reply dentro da bolha */
