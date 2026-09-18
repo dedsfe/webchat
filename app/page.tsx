@@ -8,20 +8,28 @@ const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 type Msg = { id: string; author: string; content: string; created_at: string };
 
+type FileInfo = {
+  name: string;
+  size: number;
+  type: string;
+  data: string; // base64 data url
+};
+
 type ReplyInfo = {
   id: string;
   autor: string;
   resumo: string;
-  type?: "text" | "image" | "audio";
+  type?: "text" | "image" | "audio" | "file";
 };
 
 type ParsedMsg = {
-  type: "text" | "image" | "audio";
+  type: "text" | "image" | "audio" | "file";
   text?: string;
   image?: string;
   images?: string[];
   audio?: string;
   duration?: number;
+  file?: FileInfo;
   reactions?: Record<string, string[]>;
   replyTo?: ReplyInfo;
 };
@@ -44,12 +52,13 @@ function parseContent(content: string): ParsedMsg {
           : undefined;
 
         return {
-          type: parsed.type || (imagesList ? "image" : "text"),
+          type: parsed.type || (imagesList ? "image" : parsed.file ? "file" : "text"),
           text: (parsed.text as string) || "",
           image: (parsed.image as string) || (imagesList && imagesList[0] ? imagesList[0] : undefined),
           images: imagesList,
           audio: parsed.audio as string | undefined,
           duration: parsed.duration as number | undefined,
+          file: parsed.file as FileInfo | undefined,
           reactions: parsed.reactions,
           replyTo: parsed.replyTo as ReplyInfo | undefined,
         };
@@ -61,7 +70,13 @@ function parseContent(content: string): ParsedMsg {
   return { type: "text", text: content };
 }
 
-function extrairResumo(content: string): { resumo: string; type: "text" | "image" | "audio" } {
+function formatarTamanho(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function extrairResumo(content: string): { resumo: string; type: "text" | "image" | "audio" | "file" } {
   const parsed = parseContent(content);
   if (parsed.type === "image") {
     const count = parsed.images && parsed.images.length > 1 ? ` (${parsed.images.length} fotos)` : "";
@@ -71,7 +86,55 @@ function extrairResumo(content: string): { resumo: string; type: "text" | "image
     const dur = parsed.duration ? ` (${formatTempo(parsed.duration)})` : "";
     return { resumo: `🎙️ Áudio${dur}`, type: "audio" };
   }
+  if (parsed.type === "file" && parsed.file) {
+    return { resumo: `📎 ${parsed.file.name}`, type: "file" };
+  }
   return { resumo: parsed.text || "Mensagem", type: "text" };
+}
+
+function CardArquivo({
+  file,
+  souEu,
+}: {
+  file: FileInfo;
+  souEu: boolean;
+}) {
+  const ext = file.name.split(".").pop()?.toUpperCase() || "FILE";
+
+  function baixar(e: React.MouseEvent) {
+    e.stopPropagation();
+    const a = document.createElement("a");
+    a.href = file.data;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  return (
+    <div className={`card-arquivo ${souEu ? "arquivo-eu" : "arquivo-ela"}`} onClick={baixar}>
+      <div className="arquivo-icone">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg>
+        <span className="arquivo-ext-tag">{ext.slice(0, 4)}</span>
+      </div>
+      <div className="arquivo-info">
+        <span className="arquivo-nome" title={file.name}>{file.name}</span>
+        <span className="arquivo-tam">{formatarTamanho(file.size)}</span>
+      </div>
+      <button type="button" className="arquivo-btn-download" title={`Baixar ${file.name}`}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+      </button>
+    </div>
+  );
 }
 
 function GaleriaFotos({
@@ -386,9 +449,15 @@ export default function Home() {
   const [gravando, setGravando] = useState(false);
   const [gravandoTempo, setGravandoTempo] = useState(0);
   const [respondendoA, setRespondendoA] = useState<ReplyInfo | null>(null);
+  const [msgFixadaId, setMsgFixadaId] = useState<string | null>(null);
+  const [buscaAtiva, setBuscaAtiva] = useState(false);
+  const [termoBusca, setTermoBusca] = useState("");
+  const [resultadoIndex, setResultadoIndex] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileDocInputRef = useRef<HTMLInputElement>(null);
   const inputMsgRef = useRef<HTMLInputElement>(null);
+  const inputBuscaRef = useRef<HTMLInputElement>(null);
   const fim = useRef<HTMLDivElement>(null);
   const sb = useRef<SupabaseClient | null>(null);
   const canalRef = useRef<ReturnType<SupabaseClient["channel"]> | null>(null);
@@ -447,6 +516,93 @@ export default function Home() {
         el.classList.remove("msg-destaque-piscar");
       }, 1500);
     }
+  }
+
+  function fixarMensagem(msgId: string | null) {
+    setMsgFixadaId(msgId);
+    canalRef.current?.send({
+      type: "broadcast",
+      event: "pin_msg",
+      payload: { id: msgId },
+    });
+    if (sala) {
+      if (msgId) localStorage.setItem(`pin-${sala}`, msgId);
+      else localStorage.removeItem(`pin-${sala}`);
+    }
+  }
+
+  async function carregarArquivo(file: File) {
+    const MAX_SIZE = 6 * 1024 * 1024; // 6MB
+    if (file.size > MAX_SIZE) {
+      alert("O arquivo selecionado excede o limite de 6MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64Data = reader.result as string;
+      const fileInfo: FileInfo = {
+        name: file.name,
+        size: file.size,
+        type: file.type || "application/octet-stream",
+        data: base64Data,
+      };
+
+      const rep = respondendoA;
+      setRespondendoA(null);
+
+      const conteudo = JSON.stringify({
+        type: "file",
+        file: fileInfo,
+        replyTo: rep || undefined,
+      });
+
+      const idTemp = "tmp-" + crypto.randomUUID();
+      setMsgs((atuais) => [
+        ...atuais,
+        { id: idTemp, author: nome!, content: conteudo, created_at: new Date().toISOString() },
+      ]);
+
+      const { error } = await sb.current!.from("messages_chat").insert({
+        room: sala,
+        author: nome,
+        content: conteudo,
+      });
+
+      if (error) {
+        setMsgs((atuais) => atuais.filter((m) => m.id !== idTemp));
+        alert("Não foi possível enviar o arquivo: " + error.message);
+      }
+    };
+    reader.readAsDataURL(file);
+
+    if (fileDocInputRef.current) {
+      fileDocInputRef.current.value = "";
+    }
+  }
+
+  const resultadosBusca = msgs
+    .filter((m) => {
+      if (!termoBusca.trim()) return false;
+      const t = termoBusca.toLowerCase();
+      const parsed = parseContent(m.content);
+      const textoComp = `${parsed.text || ""} ${parsed.file?.name || ""} ${m.author}`;
+      return textoComp.toLowerCase().includes(t);
+    })
+    .map((m) => m.id);
+
+  function proximoResultado() {
+    if (resultadosBusca.length === 0) return;
+    const prox = (resultadoIndex + 1) % resultadosBusca.length;
+    setResultadoIndex(prox);
+    navegarAteMensagem(resultadosBusca[prox]);
+  }
+
+  function anteriorResultado() {
+    if (resultadosBusca.length === 0) return;
+    const ant = (resultadoIndex - 1 + resultadosBusca.length) % resultadosBusca.length;
+    setResultadoIndex(ant);
+    navegarAteMensagem(resultadosBusca[ant]);
   }
 
   // Fecha o menu de reações ao clicar fora
@@ -520,6 +676,10 @@ export default function Home() {
     const client = createClient(URL, KEY);
     sb.current = client;
 
+    // carrega mensagem fixada salva
+    const pinSalvo = localStorage.getItem(`pin-${sala}`);
+    if (pinSalvo) setMsgFixadaId(pinSalvo);
+
     client
       .from("messages_chat")
       .select("id, author, content, created_at")
@@ -579,6 +739,13 @@ export default function Home() {
           }));
         }
       })
+      .on("broadcast", { event: "pin_msg" }, ({ payload }) => {
+        setMsgFixadaId(payload?.id || null);
+        if (sala) {
+          if (payload?.id) localStorage.setItem(`pin-${sala}`, payload.id);
+          else localStorage.removeItem(`pin-${sala}`);
+        }
+      })
       .on("presence", { event: "sync" }, () => {
         const state = canal.presenceState<{ user: string }>();
         const users = Object.values(state)
@@ -625,7 +792,22 @@ export default function Home() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setBuscaAtiva((b) => {
+          const prox = !b;
+          if (prox) {
+            setTimeout(() => inputBuscaRef.current?.focus(), 80);
+          } else {
+            setTermoBusca("");
+          }
+          return prox;
+        });
+        return;
+      }
       if (e.key === "Escape") {
+        setBuscaAtiva(false);
+        setTermoBusca("");
         setLightboxState(null);
         setRespondendoA(null);
       }
@@ -986,8 +1168,13 @@ export default function Home() {
       onDrop={(e) => {
         e.preventDefault();
         setArrastando(false);
-        const files = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("image/"));
-        if (files.length > 0) carregarFotos(files);
+        const allFiles = Array.from(e.dataTransfer.files || []);
+        const imgFiles = allFiles.filter((f) => f.type.startsWith("image/"));
+        if (imgFiles.length > 0) {
+          carregarFotos(imgFiles);
+        } else if (allFiles.length > 0) {
+          carregarArquivo(allFiles[0]);
+        }
       }}
     >
       <div className="topo" />
@@ -1004,18 +1191,156 @@ export default function Home() {
           </span>
         </div>
       </div>
-      <button className="sair" onClick={sairDaSala}>sair</button>
 
-      {/* Overlay ao arrastar uma foto para o chat */}
+      <div className="topo-acoes">
+        <button
+          type="button"
+          className={`btn-topo-acao ${buscaAtiva ? "ativo" : ""}`}
+          onClick={() => {
+            setBuscaAtiva((b) => {
+              const prox = !b;
+              if (prox) setTimeout(() => inputBuscaRef.current?.focus(), 80);
+              else setTermoBusca("");
+              return prox;
+            });
+          }}
+          title="Buscar mensagens (Cmd+F / Ctrl+F)"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </button>
+        <button className="sair" onClick={sairDaSala}>sair</button>
+      </div>
+
+      {/* Barra de busca flutuante no topo */}
+      {buscaAtiva && (
+        <div className="barra-busca">
+          <div className="busca-input-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#656D76" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              ref={inputBuscaRef}
+              className="campo-busca"
+              value={termoBusca}
+              onChange={(e) => {
+                setTermoBusca(e.target.value);
+                setResultadoIndex(0);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (e.shiftKey) anteriorResultado();
+                  else proximoResultado();
+                }
+                if (e.key === "Escape") {
+                  setBuscaAtiva(false);
+                  setTermoBusca("");
+                }
+              }}
+              placeholder="buscar mensagens ou arquivos..."
+              autoFocus
+            />
+          </div>
+
+          {termoBusca.trim() && (
+            <div className="busca-contador">
+              {resultadosBusca.length > 0
+                ? `${resultadoIndex + 1} de ${resultadosBusca.length}`
+                : "0 encontrados"}
+            </div>
+          )}
+
+          <div className="busca-nav-botoes">
+            <button
+              type="button"
+              className="btn-busca-nav"
+              onClick={anteriorResultado}
+              disabled={resultadosBusca.length === 0}
+              title="Resultado anterior (Shift+Enter)"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="btn-busca-nav"
+              onClick={proximoResultado}
+              disabled={resultadosBusca.length === 0}
+              title="Próximo resultado (Enter)"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className="btn-busca-fechar"
+              onClick={() => {
+                setBuscaAtiva(false);
+                setTermoBusca("");
+              }}
+              title="Fechar busca (Esc)"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Banner de Mensagem Fixada */}
+      {(() => {
+        if (!msgFixadaId) return null;
+        const msgFixada = msgs.find((m) => m.id === msgFixadaId);
+        if (!msgFixada) return null;
+        const res = extrairResumo(msgFixada.content);
+        return (
+          <div className="barra-fixada" onClick={() => navegarAteMensagem(msgFixada.id)} title="Clique para ir até a mensagem">
+            <div className="barra-fixada-icone">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1">
+                <path d="M12 17v5M5 17h14v-2l-2-2V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v8l-2 2v2z" />
+              </svg>
+            </div>
+            <div className="barra-fixada-conteudo">
+              <span className="barra-fixada-autor">{msgFixada.author === nome ? "Você" : msgFixada.author}:</span>
+              <span className="barra-fixada-texto">{res.resumo}</span>
+            </div>
+            <button
+              type="button"
+              className="barra-fixada-desafixar"
+              onClick={(e) => {
+                e.stopPropagation();
+                fixarMensagem(null);
+              }}
+              title="Desafixar mensagem"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        );
+      })()}
+
+      {/* Overlay ao arrastar uma foto ou arquivo para o chat */}
       {arrastando && (
         <div className="overlay-drag">
           <div className="overlay-drag-caixa">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2F80ED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="4" ry="4" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="18" x2="12" y2="12" />
+              <line x1="9" y1="15" x2="12" y2="12" />
+              <line x1="15" y1="15" x2="12" y2="12" />
             </svg>
-            <p>solte a foto aqui para enviar</p>
+            <p>solte os arquivos ou fotos aqui para enviar</p>
           </div>
         </div>
       )}
@@ -1047,17 +1372,20 @@ export default function Home() {
               const souEu = m.author === nome;
               const temReacoes = parsed.reactions && Object.keys(parsed.reactions).length > 0;
               const emojis = ["❤️", "😂", "👍", "🔥", "😮", "🎉"];
+              const isResultadoBusca = termoBusca.trim().length > 0 && resultadosBusca.includes(m.id);
+              const isResultadoBuscaAtivo = termoBusca.trim().length > 0 && resultadosBusca[resultadoIndex] === m.id;
+              const isFixada = msgFixadaId === m.id;
 
               return (
                 <div
                   key={m.id}
                   id={`msg-${m.id}`}
-                  className={`msg-wrap ${souEu ? "wrap-eu" : "wrap-ela"}`}
+                  className={`msg-wrap ${souEu ? "wrap-eu" : "wrap-ela"} ${isResultadoBuscaAtivo ? "msg-resultado-ativo" : isResultadoBusca ? "msg-resultado-encontrado" : ""} ${isFixada ? "msg-esta-fixada" : ""}`}
                   onDoubleClick={() => iniciarResposta(m)}
                   title="Duplo clique para responder"
                 >
                   <div className="msg-linha">
-                    {/* Ações da mensagem (Responder + Reagir) */}
+                    {/* Ações da mensagem (Responder + Fixar + Reagir) */}
                     <div className="msg-acoes-wrap">
                       <button
                         type="button"
@@ -1068,6 +1396,17 @@ export default function Home() {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="9 17 4 12 9 7" />
                           <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                        </svg>
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`btn-msg-acao ${isFixada ? "ativo" : ""}`}
+                        onClick={() => fixarMensagem(isFixada ? null : m.id)}
+                        title={isFixada ? "Desafixar mensagem" : "Fixar no topo"}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill={isFixada ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 17v5M5 17h14v-2l-2-2V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v8l-2 2v2z" />
                         </svg>
                       </button>
 
@@ -1165,6 +1504,16 @@ export default function Home() {
                           />
                         </div>
                       )
+                    ) : parsed.type === "file" && parsed.file ? (
+                      <div className={`msg msg-tipo-arquivo ${souEu ? "eu" : "ela"}`}>
+                        <div className="msg-conteudo">
+                          {parsed.replyTo && (
+                            <MsgQuote replyTo={parsed.replyTo} nomeUsuario={nome} onNavigate={navegarAteMensagem} />
+                          )}
+                          <CardArquivo file={parsed.file} souEu={souEu} />
+                          <span className="msg-hora">{formatarHora(m.created_at)}</span>
+                        </div>
+                      </div>
                     ) : (
                       <div className={`msg ${souEu ? "eu" : "ela"}`}>
                         <div className="msg-conteudo">
@@ -1328,6 +1677,18 @@ export default function Home() {
                 }}
               />
 
+              {/* Input oculto para selecionar arquivos e documentos */}
+              <input
+                type="file"
+                ref={fileDocInputRef}
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    carregarArquivo(e.target.files[0]);
+                  }
+                }}
+              />
+
               <button
                 type="button"
                 className="btn-foto"
@@ -1344,6 +1705,19 @@ export default function Home() {
                     <polyline points="21 15 16 10 5 21" />
                   </svg>
                 )}
+              </button>
+
+              {/* Botão de anexo de arquivos e documentos */}
+              <button
+                type="button"
+                className="btn-foto btn-anexo"
+                onClick={() => fileDocInputRef.current?.click()}
+                title="Enviar arquivo ou documento (PDF, ZIP, DOCX, etc.)"
+                disabled={processandoFoto}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#656D76" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
               </button>
 
               {/* Botão de gravação de áudio */}

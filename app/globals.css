@@ -18,12 +18,40 @@ body {
   position: relative;
 }
 
-/* botão de sair */
-.sair {
+/* topo e ações */
+.topo-acoes {
   position: absolute;
-  top: 14px;
+  top: 12px;
   right: 16px;
-  z-index: 3;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-topo-acao {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #8E95A0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-topo-acao:hover {
+  background: #F2F3F5;
+  color: #1F2937;
+}
+.btn-topo-acao.ativo {
+  background: #E9F4FD;
+  color: #2F80ED;
+}
+
+.sair {
   border: none;
   background: none;
   color: #A3A9B3;
@@ -32,8 +60,13 @@ body {
   font-weight: 600;
   cursor: pointer;
   padding: 6px 8px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
 }
-.sair:hover { color: #1F2937; }
+.sair:hover {
+  color: #1F2937;
+  background: #F2F3F5;
+}
 
 /* degradê borrado no topo */
 .topo {
@@ -1192,6 +1225,310 @@ body {
   background: #E5E7EB;
   color: #EF4444;
 }
+
+/* Botão de Anexo de Arquivo no input-bar */
+.btn-anexo:hover {
+  color: #2F80ED;
+  background: #E5E7EB;
+}
+
+/* Estado ativo do botão de fixar no menu da mensagem */
+.btn-msg-acao.ativo {
+  color: #2F80ED;
+  background: rgba(47, 128, 237, 0.12);
+}
+
+/* Barra de Busca flutuante */
+.barra-busca {
+  position: absolute;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92%, 520px);
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.05);
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: slideDownBusca 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDownBusca {
+  from { opacity: 0; transform: translate(-50%, -10px) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+.busca-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.campo-busca {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1F2937;
+  outline: none;
+}
+.campo-busca::placeholder {
+  color: #A3A9B3;
+}
+
+.busca-contador {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #656D76;
+  white-space: nowrap;
+  padding: 3px 8px;
+  background: #F3F4F6;
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+
+.busca-nav-botoes {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.btn-busca-nav, .btn-busca-fechar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #656D76;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-busca-nav:hover:not(:disabled), .btn-busca-fechar:hover {
+  background: #F3F4F6;
+  color: #1F2937;
+}
+
+.btn-busca-nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Banner de Mensagem Fixada */
+.barra-fixada {
+  position: absolute;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(92%, 580px);
+  z-index: 4;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(47, 128, 237, 0.18);
+  border-left: 3.5px solid #2F80ED;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  animation: fadeInFixada 0.2s ease;
+}
+.barra-fixada:hover {
+  transform: translate(-50%, -1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+@keyframes fadeInFixada {
+  from { opacity: 0; transform: translate(-50%, -6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.barra-fixada-icone {
+  color: #2F80ED;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.barra-fixada-conteudo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.barra-fixada-autor {
+  font-weight: 700;
+  color: #2F80ED;
+  flex-shrink: 0;
+}
+
+.barra-fixada-texto {
+  color: #4B5563;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barra-fixada-desafixar {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #9CA3AF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+.barra-fixada-desafixar:hover {
+  background: #F3F4F6;
+  color: #EF4444;
+}
+
+/* Destaque de busca nas mensagens */
+.msg-resultado-ativo .msg {
+  outline: 2.5px solid #2F80ED;
+  outline-offset: 1px;
+  animation: pulseResultadoBusca 1.6s infinite alternate;
+}
+
+@keyframes pulseResultadoBusca {
+  0% { box-shadow: 0 0 0 2px rgba(47, 128, 237, 0.2); }
+  100% { box-shadow: 0 0 0 6px rgba(47, 128, 237, 0.35); }
+}
+
+.msg-resultado-encontrado .msg {
+  outline: 1.5px dashed rgba(47, 128, 237, 0.45);
+  outline-offset: 1px;
+}
+
+/* Card de Arquivo e Documento */
+.msg-tipo-arquivo {
+  padding: 8px 10px 8px 8px !important;
+}
+
+.card-arquivo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 13px;
+  border-radius: 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  max-width: 320px;
+  min-width: 220px;
+}
+
+.arquivo-eu {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(47, 128, 237, 0.16);
+}
+.arquivo-eu:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.arquivo-ela {
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+.arquivo-ela:hover {
+  background: #F8FAFC;
+}
+
+.arquivo-icone {
+  position: relative;
+  width: 38px;
+  height: 42px;
+  border-radius: 8px;
+  background: #2F80ED;
+  color: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(47, 128, 237, 0.25);
+}
+
+.arquivo-ext-tag {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-top: 1px;
+}
+
+.arquivo-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.arquivo-nome {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1F2937;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arquivo-tam {
+  font-size: 11px;
+  color: #656D76;
+  font-weight: 500;
+}
+
+.arquivo-btn-download {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: #F2F3F5;
+  color: #2F80ED;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.arquivo-eu .arquivo-btn-download {
+  background: #2F80ED;
+  color: #FFFFFF;
+}
+.arquivo-eu .arquivo-btn-download:hover {
+  background: #1B65C5;
+  transform: scale(1.05);
+}
+.arquivo-ela .arquivo-btn-download:hover {
+  background: #E5E7EB;
+  transform: scale(1.05);
+}
+
 
 
 
