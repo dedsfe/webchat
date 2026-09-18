@@ -2406,3 +2406,17 @@ body {
   color: #68766D;
   opacity: 1;
 }
+
+/* Citações dentro de mensagens enviadas usam branco em passos de opacidade.
+   Azul sobre azul não tem contraste suficiente para ser informação secundária. */
+.eu .msg-quote-linha {
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.eu .msg-quote-nome {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.eu .msg-quote-trecho {
+  color: rgba(255, 255, 255, 0.76);
+}
