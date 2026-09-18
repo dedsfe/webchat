@@ -1221,42 +1221,48 @@ export default function Home() {
         }
       }}
     >
-      <div className="topo" />
-      <div className="topo-info">
-        <div
-          className="online-badge"
-          title={usuariosOnline.length > 0 ? `Na sala: ${usuariosOnline.join(", ")}` : "Você está na sala"}
-        >
-          <span className="online-ponto" />
-          <span>
-            {usuariosOnline.length <= 1
-              ? "só você online"
-              : `${usuariosOnline.length} online`}
-          </span>
+      {/* Barra de Navegação Nativa (Estilo iOS / Mobile Nativo) */}
+      <header className="app-header-nativo">
+        <div className="header-esq">
+          <button className="btn-header-voltar" onClick={sairDaSala} title="Sair da sala">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+            <span className="btn-header-voltar-texto">sair</span>
+          </button>
         </div>
-      </div>
 
-      <div className="topo-acoes">
-        <button
-          type="button"
-          className={`btn-topo-acao ${buscaAtiva ? "ativo" : ""}`}
-          onClick={() => {
-            setBuscaAtiva((b) => {
-              const prox = !b;
-              if (prox) setTimeout(() => inputBuscaRef.current?.focus(), 80);
-              else setTermoBusca("");
-              return prox;
-            });
-          }}
-          title="Buscar mensagens (Cmd+F / Ctrl+F)"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </button>
-        <button className="sair" onClick={sairDaSala}>sair</button>
-      </div>
+        <div className="header-centro">
+          <span className="header-titulo">{sala ? `sala ${sala.slice(0, 8)}` : "nosso bloco"}</span>
+          <div className="header-subtitulo">
+            <span className="header-online-dot" />
+            <span className="header-online-status">
+              {usuariosOnline.length <= 1 ? "só você online" : `${usuariosOnline.length} online`}
+            </span>
+          </div>
+        </div>
+
+        <div className="header-dir">
+          <button
+            type="button"
+            className={`btn-header-acao ${buscaAtiva ? "ativo" : ""}`}
+            onClick={() => {
+              setBuscaAtiva((b) => {
+                const prox = !b;
+                if (prox) setTimeout(() => inputBuscaRef.current?.focus(), 80);
+                else setTermoBusca("");
+                return prox;
+              });
+            }}
+            title="Buscar mensagens (Cmd+F / Ctrl+F)"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+        </div>
+      </header>
 
       {/* Barra de busca flutuante no topo */}
       {buscaAtiva && (
@@ -1696,135 +1702,137 @@ export default function Home() {
             </div>
           )}
 
-          {gravando ? (
-            <div className="input-bar input-bar-gravando">
-              <div className="gravando-status">
-                <span className="gravando-ponto" />
-                <span className="gravando-tempo">{formatTempo(gravandoTempo)}</span>
-                <span className="gravando-texto">Gravando áudio...</span>
-              </div>
-              <button
-                type="button"
-                className="btn-cancelar-gravacao"
-                onClick={cancelarGravacao}
-                title="Cancelar gravação"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="enviar"
-                onClick={pararEEnviarGravacao}
-                title="Enviar áudio"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <div className="input-bar">
-              {/* Input oculto para selecionar múltiplas fotos */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                accept="image/*"
-                multiple
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    carregarFotos(e.target.files);
-                  }
-                }}
-              />
-
-              {/* Input oculto para selecionar arquivos e documentos */}
-              <input
-                type="file"
-                ref={fileDocInputRef}
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    carregarArquivo(e.target.files[0]);
-                  }
-                }}
-              />
-
-              <button
-                type="button"
-                className="btn-foto"
-                onClick={() => fileInputRef.current?.click()}
-                title="Enviar fotos (ou selecione/cole várias com Ctrl+V)"
-                disabled={processandoFoto}
-              >
-                {processandoFoto ? (
-                  <span className="spinner" />
-                ) : (
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#656D76" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="4" ry="4" />
-                    <circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
+          <div className="input-bar-wrap">
+            {gravando ? (
+              <div className="input-bar input-bar-gravando">
+                <div className="gravando-status">
+                  <span className="gravando-ponto" />
+                  <span className="gravando-tempo">{formatTempo(gravandoTempo)}</span>
+                  <span className="gravando-texto">Gravando áudio...</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn-cancelar-gravacao"
+                  onClick={cancelarGravacao}
+                  title="Cancelar gravação"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
-                )}
-              </button>
+                </button>
+                <button
+                  type="button"
+                  className="enviar"
+                  onClick={pararEEnviarGravacao}
+                  title="Enviar áudio"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div className="input-bar">
+                {/* Input oculto para selecionar múltiplas fotos */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      carregarFotos(e.target.files);
+                    }
+                  }}
+                />
 
-              {/* Botão de anexo de arquivos e documentos */}
-              <button
-                type="button"
-                className="btn-foto btn-anexo"
-                onClick={() => fileDocInputRef.current?.click()}
-                title="Enviar arquivo ou documento (PDF, ZIP, DOCX, etc.)"
-                disabled={processandoFoto}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#656D76" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                </svg>
-              </button>
+                {/* Input oculto para selecionar arquivos e documentos */}
+                <input
+                  type="file"
+                  ref={fileDocInputRef}
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      carregarArquivo(e.target.files[0]);
+                    }
+                  }}
+                />
 
-              {/* Botão de gravação de áudio */}
-              <button
-                type="button"
-                className="btn-foto btn-mic"
-                onClick={iniciarGravacao}
-                title="Gravar áudio"
-                disabled={processandoFoto}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#656D76" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
-              </button>
+                <button
+                  type="button"
+                  className="btn-foto"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Enviar fotos"
+                  disabled={processandoFoto}
+                >
+                  {processandoFoto ? (
+                    <span className="spinner" />
+                  ) : (
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="4" ry="4" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  )}
+                </button>
 
-              <input
-                ref={inputMsgRef}
-                className="campo"
-                value={texto}
-                onChange={handleTextoChange}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) enviar();
-                  if (e.key === "Escape" && respondendoA) setRespondendoA(null);
-                }}
-                placeholder={
-                  respondendoA
-                    ? `respondendo a ${respondendoA.autor === nome ? "você" : respondendoA.autor}...`
-                    : fotosAnexadas.length > 0
-                    ? `legenda para ${fotosAnexadas.length === 1 ? "a foto" : `as ${fotosAnexadas.length} fotos`} (opcional)...`
-                    : "escreve aqui (ou grave um áudio)"
-                }
-              />
+                {/* Botão de anexo de arquivos e documentos */}
+                <button
+                  type="button"
+                  className="btn-foto btn-anexo"
+                  onClick={() => fileDocInputRef.current?.click()}
+                  title="Enviar arquivo ou documento"
+                  disabled={processandoFoto}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                  </svg>
+                </button>
 
-              <button className="enviar" onClick={enviar} disabled={(!texto.trim() && fotosAnexadas.length === 0) || processandoFoto}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            </div>
-          )}
+                {/* Botão de gravação de áudio */}
+                <button
+                  type="button"
+                  className="btn-foto btn-mic"
+                  onClick={iniciarGravacao}
+                  title="Gravar áudio"
+                  disabled={processandoFoto}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                </button>
+
+                <input
+                  ref={inputMsgRef}
+                  className="campo"
+                  value={texto}
+                  onChange={handleTextoChange}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) enviar();
+                    if (e.key === "Escape" && respondendoA) setRespondendoA(null);
+                  }}
+                  placeholder={
+                    respondendoA
+                      ? `respondendo a ${respondendoA.autor === nome ? "você" : respondendoA.autor}...`
+                      : fotosAnexadas.length > 0
+                      ? `legenda para ${fotosAnexadas.length === 1 ? "a foto" : `as ${fotosAnexadas.length} fotos`}...`
+                      : "Mensagem"
+                  }
+                />
+
+                <button className="enviar" onClick={enviar} disabled={(!texto.trim() && fotosAnexadas.length === 0) || processandoFoto}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
         </>
       )}
 

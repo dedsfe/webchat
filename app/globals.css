@@ -1,14 +1,43 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --ios-blue: #007AFF;
+  --ios-blue-active: #0062CC;
+  --ios-bg: #FFFFFF;
+  --ios-chat-bg: #EFEFF4;
+  --ios-bubble-me: #007AFF;
+  --ios-bubble-them: #E9E9EB;
+  --ios-text-me: #FFFFFF;
+  --ios-text-them: #000000;
+  --ios-subtext: #8E8E93;
+  --ios-border: rgba(60, 60, 67, 0.14);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
 
-body {
-  font-family: -apple-system, "SF Pro Text", Inter, system-ui, sans-serif;
-  background: #F2F2F5;
-  min-height: 100vh;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: #F2F2F7;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", -apple-system, Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: none;
 }
 
 .bloco {
   width: 100%;
-  height: 100vh;
+  max-width: 860px;
+  height: 100%;
   height: 100dvh;
   background: #FFFFFF;
   display: flex;
@@ -16,142 +45,331 @@ body {
   overflow: hidden;
   margin: 0 auto;
   position: relative;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.05);
 }
 
-/* topo e ações */
-.topo-acoes {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  z-index: 5;
+@media (max-width: 860px) {
+  .bloco {
+    max-width: 100%;
+    box-shadow: none;
+  }
+}
+
+/* Header Nativo de Chat (Barra de Navegação Estilo iOS) */
+.app-header-nativo {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  padding-top: var(--safe-top);
+  height: calc(46px + var(--safe-top));
+  padding-left: max(10px, var(--safe-left));
+  padding-right: max(10px, var(--safe-right));
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 0.5px solid var(--ios-border);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  flex-shrink: 0;
+  user-select: none;
 }
 
-.btn-topo-acao {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+.header-esq, .header-dir {
+  display: flex;
+  align-items: center;
+  min-width: 60px;
+}
+.header-dir {
+  justify-content: flex-end;
+}
+
+.btn-header-voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   border: none;
   background: transparent;
-  color: #8E95A0;
+  color: var(--ios-blue);
+  font-family: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px 4px 6px 0;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+.btn-header-voltar:active {
+  opacity: 0.5;
+  transform: scale(0.96);
+}
+.btn-header-voltar-texto {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.header-centro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+}
+
+.header-titulo {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #000000;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.15;
+}
+
+.header-subtitulo {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 1px;
+}
+
+.header-online-dot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background: #34C759;
+  box-shadow: 0 0 0 1.5px rgba(52, 199, 89, 0.25);
+  animation: pulsoOnlineSuave 2.2s infinite ease-in-out;
+}
+@keyframes pulsoOnlineSuave {
+  0%, 100% { opacity: 0.8; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.header-online-status {
+  font-size: 11.5px;
+  color: var(--ios-subtext);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.btn-header-acao {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(142, 142, 147, 0.12);
+  color: #1C1C1E;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.btn-topo-acao:hover {
-  background: #F2F3F5;
-  color: #1F2937;
+.btn-header-acao:active {
+  transform: scale(0.9);
+  background: rgba(142, 142, 147, 0.24);
 }
-.btn-topo-acao.ativo {
-  background: #E9F4FD;
-  color: #2F80ED;
-}
-
-.sair {
-  border: none;
-  background: none;
-  color: #A3A9B3;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 6px 8px;
-  border-radius: 8px;
-  transition: all 0.15s ease;
-}
-.sair:hover {
-  color: #1F2937;
-  background: #F2F3F5;
+.btn-header-acao.ativo {
+  background: rgba(0, 122, 255, 0.15);
+  color: var(--ios-blue);
 }
 
-/* degradê borrado no topo */
-.topo {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 56px;
-  z-index: 1;
-  pointer-events: none;
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
-  -webkit-mask-image: linear-gradient(#000, transparent);
-  mask-image: linear-gradient(#000, transparent);
-}
-
-/* mensagens */
+/* Área de Mensagens */
 .msgs {
   flex: 1;
   overflow-y: auto;
-  padding: 64px clamp(20px, 3.5vw, 44px) 14px;
+  -webkit-overflow-scrolling: touch;
+  padding: 14px 16px 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   width: 100%;
+  background: #FFFFFF;
 }
 
+@media (max-width: 600px) {
+  .msgs {
+    padding: 10px 12px 14px;
+    gap: 7px;
+  }
+}
+
+.msg-wrap {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.wrap-eu {
+  align-items: flex-end;
+}
+.wrap-ela {
+  align-items: flex-start;
+}
+
+.msg-linha {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 82%;
+  position: relative;
+}
+
+@media (max-width: 600px) {
+  .msg-linha {
+    max-width: 88%;
+  }
+}
+
+/* Bolhas de Mensagem Estilo iMessage / Apple */
 .msg {
-  max-width: 100%;
-  padding: 12px 18px;
-  border-radius: 22px;
-  font-size: 16px;
-  line-height: 1.45;
+  padding: 8px 14px;
+  border-radius: 18px;
+  font-size: 15.5px;
+  line-height: 1.38;
+  letter-spacing: -0.01em;
   white-space: pre-wrap;
   word-break: break-word;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .eu {
-  align-self: flex-end;
-  background: #E9F4FD;
-  color: #2F80ED;
-  border-bottom-right-radius: 8px;
+  background: #007AFF;
+  color: #FFFFFF;
+  border-bottom-right-radius: 4px;
 }
 
 .ela {
-  align-self: flex-start;
-  background: #F2F3F5;
-  color: #1F2937;
-  border-bottom-left-radius: 8px;
+  background: #E9E9EB;
+  color: #000000;
+  border-bottom-left-radius: 4px;
 }
 
-/* input */
+.msg-conteudo {
+  display: flex;
+  flex-direction: column;
+}
+
+.msg-texto-corpo {
+  line-height: 1.38;
+}
+
+.msg-hora {
+  font-size: 10.5px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  margin-top: 3px;
+  align-self: flex-end;
+  line-height: 1;
+}
+.eu .msg-hora {
+  color: rgba(255, 255, 255, 0.72);
+}
+.ela .msg-hora {
+  color: #8E8E93;
+}
+
+/* Barra de Digitação Nativa (Input Bar Estilo iMessage) */
+.input-bar-wrap {
+  width: 100%;
+  background: rgba(249, 249, 250, 0.94);
+  backdrop-filter: blur(25px) saturate(190%);
+  -webkit-backdrop-filter: blur(25px) saturate(190%);
+  border-top: 0.5px solid var(--ios-border);
+  padding-bottom: max(6px, var(--safe-bottom));
+  flex-shrink: 0;
+  z-index: 10;
+}
+
 .input-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 20px 26px;
-  max-width: 720px;
+  gap: 6px;
+  padding: 7px 10px 4px;
+  max-width: 860px;
   width: 100%;
   margin: 0 auto;
 }
+
 .campo {
   flex: 1;
-  background: #F2F3F5;
-  border: none;
-  border-radius: 999px;
-  padding: 13px 18px;
-  color: #1F2937;
-  font-size: 15px;
+  background: #FFFFFF;
+  border: 1px solid rgba(60, 60, 67, 0.18);
+  border-radius: 20px;
+  padding: 8px 14px;
+  color: #000000;
+  font-size: 16px; /* 16px no mobile impede o Safari de dar auto-zoom */
   font-family: inherit;
   outline: none;
+  min-height: 38px;
+  transition: border-color 0.15s ease;
 }
-.campo::placeholder { color: #A3A9B3; }
-.enviar {
-  width: 46px;
-  height: 46px;
+.campo:focus {
+  border-color: rgba(0, 122, 255, 0.6);
+}
+.campo::placeholder {
+  color: #8E8E93;
+  font-size: 15px;
+}
+
+/* Botões de Ação na barra de input */
+.btn-foto, .btn-mic, .btn-anexo {
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: none;
-  background: #2F80ED;
+  background: transparent;
+  color: #8E8E93;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.btn-foto:active, .btn-mic:active, .btn-anexo:active {
+  transform: scale(0.9);
+  color: #007AFF;
+  background: rgba(0, 122, 255, 0.1);
+}
+.btn-foto:disabled, .btn-mic:disabled, .btn-anexo:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Botão de Envio Circular Estilo iMessage */
+.enviar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: #007AFF;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.enviar:disabled { background: #C9DFF6; cursor: default; }
-.enviar svg { display: block; }
+.enviar:disabled {
+  background: #D1D1D6;
+  opacity: 0.65;
+  cursor: default;
+}
+.enviar:not(:disabled):active {
+  transform: scale(0.92);
+  background: #0062CC;
+}
+.enviar svg {
+  display: block;
+}
 
 /* primeira visita: pedir o nome */
 .pedir-nome {
@@ -1238,59 +1456,57 @@ body {
   background: rgba(47, 128, 237, 0.12);
 }
 
-/* Barra de Busca flutuante */
+/* Barra de Busca Nativa */
 .barra-busca {
-  position: absolute;
-  top: 54px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(92%, 520px);
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.05);
-  padding: 7px 12px;
+  position: sticky;
+  top: calc(46px + var(--safe-top));
+  width: 100%;
+  z-index: 18;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 0.5px solid var(--ios-border);
+  padding: 8px 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  animation: slideDownBusca 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 8px;
+  animation: slideDownNativo 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes slideDownBusca {
-  from { opacity: 0; transform: translate(-50%, -10px) scale(0.98); }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+@keyframes slideDownNativo {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .busca-input-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex: 1;
+  background: #E5E5EA;
+  padding: 6px 10px;
+  border-radius: 10px;
 }
 
 .campo-busca {
   flex: 1;
   border: none;
   background: transparent;
-  font-size: 14px;
+  font-size: 15px;
   font-family: inherit;
-  color: #1F2937;
+  color: #000000;
   outline: none;
 }
 .campo-busca::placeholder {
-  color: #A3A9B3;
+  color: #8E8E93;
 }
 
 .busca-contador {
   font-size: 11.5px;
-  font-weight: 600;
-  color: #656D76;
+  font-weight: 500;
+  color: #8E8E93;
   white-space: nowrap;
-  padding: 3px 8px;
-  background: #F3F4F6;
+  padding: 2px 6px;
   border-radius: 999px;
   font-variant-numeric: tabular-nums;
 }
@@ -1298,7 +1514,7 @@ body {
 .busca-nav-botoes {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
 }
 
 .btn-busca-nav, .btn-busca-fechar {
@@ -1307,7 +1523,7 @@ body {
   border-radius: 8px;
   border: none;
   background: transparent;
-  color: #656D76;
+  color: #8E8E93;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1315,46 +1531,37 @@ body {
   transition: all 0.15s ease;
 }
 
-.btn-busca-nav:hover:not(:disabled), .btn-busca-fechar:hover {
-  background: #F3F4F6;
-  color: #1F2937;
+.btn-busca-nav:active:not(:disabled), .btn-busca-fechar:active {
+  background: #E5E5EA;
+  color: #000000;
 }
 
 .btn-busca-nav:disabled {
-  opacity: 0.3;
+  opacity: 0.25;
   cursor: default;
 }
 
-/* Banner de Mensagem Fixada */
+/* Banner de Mensagem Fixada Nativo */
 .barra-fixada {
-  position: absolute;
-  top: 54px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(92%, 580px);
-  z-index: 4;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(47, 128, 237, 0.18);
-  border-left: 3.5px solid #2F80ED;
-  border-radius: 12px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
-  padding: 8px 12px;
+  position: sticky;
+  top: calc(46px + var(--safe-top));
+  width: 100%;
+  z-index: 17;
+  background: rgba(242, 242, 247, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 0.5px solid var(--ios-border);
+  border-left: 3.5px solid var(--ios-blue);
+  padding: 7px 12px;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  animation: fadeInFixada 0.2s ease;
+  transition: background 0.15s ease;
+  animation: slideDownNativo 0.2s ease;
 }
-.barra-fixada:hover {
-  transform: translate(-50%, -1px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-}
-@keyframes fadeInFixada {
-  from { opacity: 0; transform: translate(-50%, -6px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+.barra-fixada:active {
+  background: rgba(229, 229, 234, 0.94);
 }
 
 .barra-fixada-icone {
@@ -1532,18 +1739,18 @@ body {
 /* Botão flutuante para descer ao final da conversa */
 .btn-descer-fim {
   position: absolute;
-  right: clamp(16px, 3.5vw, 36px);
-  bottom: 84px;
-  z-index: 7;
-  width: 42px;
-  height: 42px;
+  right: max(14px, var(--safe-right));
+  bottom: calc(58px + var(--safe-bottom));
+  z-index: 12;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05);
-  color: #2F80ED;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 0.5px solid rgba(60, 60, 67, 0.16);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.04);
+  color: var(--ios-blue);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1565,27 +1772,27 @@ body {
 
 .btn-descer-fim:hover {
   background: #FFFFFF;
-  color: #1B65C5;
+  color: var(--ios-blue-active);
   transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 6px 20px rgba(47, 128, 237, 0.22);
+  box-shadow: 0 6px 18px rgba(0, 122, 255, 0.22);
 }
 
 .btn-descer-fim:active {
-  transform: translateY(0) scale(0.95);
+  transform: scale(0.92);
 }
 
 .badge-novas-msgs {
   position: absolute;
   top: -5px;
   right: -5px;
-  background: #2F80ED;
+  background: var(--ios-blue);
   color: #FFFFFF;
   font-size: 11px;
   font-weight: 700;
   padding: 1px 6px;
   border-radius: 999px;
   border: 2px solid #FFFFFF;
-  box-shadow: 0 2px 6px rgba(47, 128, 237, 0.35);
+  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.35);
   line-height: 1.3;
   min-width: 18px;
   text-align: center;
