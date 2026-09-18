@@ -2347,3 +2347,12 @@ body {
     -webkit-backdrop-filter: none;
   }
 }
+
+/* Sem painel atrás do compositor: o campo e os atalhos permanecem, mas o
+   restante deixa o fundo contínuo da conversa aparecer. */
+.input-bar-wrap {
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
