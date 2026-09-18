@@ -405,3 +405,91 @@ body {
   user-select: none;
 }
 
+/* Informações do topo (Presença / Usuários Online) */
+.topo-info {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.online-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4B5563;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  cursor: default;
+  user-select: none;
+}
+.online-ponto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  animation: pulsoVerde 2.2s infinite;
+}
+@keyframes pulsoVerde {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+  70% { box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Indicador de Digitando (Typing indicator) */
+.msg-digitando-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  animation: fadeIn 0.2s ease-out;
+  margin-top: -4px;
+}
+.msg-digitando {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 11px 15px !important;
+  border-radius: 20px !important;
+  border-bottom-left-radius: 6px !important;
+  background: #F2F3F5;
+  width: fit-content;
+}
+.ponto-digitando {
+  width: 6.5px;
+  height: 6.5px;
+  background: #8E95A0;
+  border-radius: 50%;
+  animation: pularPonto 1.4s infinite ease-in-out both;
+}
+.ponto-digitando:nth-child(1) { animation-delay: -0.32s; }
+.ponto-digitando:nth-child(2) { animation-delay: -0.16s; }
+.ponto-digitando:nth-child(3) { animation-delay: 0s; }
+
+@keyframes pularPonto {
+  0%, 80%, 100% {
+    transform: scale(0.65);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+.texto-digitando {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8E95A0;
+}
+
+

@@ -83,6 +83,42 @@ async function otimizarImagem(file: File): Promise<string> {
   });
 }
 
+function tocarSomNotificacao() {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    // Primeiro tom suave (F5 - 698Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(698.46, ctx.currentTime);
+    gain1.gain.setValueAtTime(0.06, ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(ctx.currentTime);
+    osc1.stop(ctx.currentTime + 0.12);
+
+    // Segundo tom (A5 - 880Hz), sutil e agradável estilo iMessage
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.07);
+    gain2.gain.setValueAtTime(0.08, ctx.currentTime + 0.07);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(ctx.currentTime + 0.07);
+    osc2.stop(ctx.currentTime + 0.28);
+  } catch {
+    // áudio bloqueado ou não suportado
+  }
+}
+
 function novaSala() {
   return crypto.randomUUID().replace(/-/g, "").slice(0, 10);
 }
@@ -100,9 +136,17 @@ export default function Home() {
   const [processandoFoto, setProcessandoFoto] = useState(false);
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState(false);
+  const [usuariosOnline, setUsuariosOnline] = useState<string[]>([]);
+  const [typingTimestamps, setTypingTimestamps] = useState<Record<string, number>>({});
+  const [digitando, setDigitando] = useState<string[]>([]);
+  const [naoLidas, setNaoLidas] = useState(0);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fim = useRef<HTMLDivElement>(null);
   const sb = useRef<SupabaseClient | null>(null);
+  const canalRef = useRef<ReturnType<SupabaseClient["channel"]> | null>(null);
+  const lastTypingSentRef = useRef<number>(0);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // se a URL tem sala (?r=abc123) entra direto e memoriza; senão volta pra sala memorizada
   useEffect(() => {
@@ -120,7 +164,49 @@ export default function Home() {
     setNome(localStorage.getItem("meu-nome"));
   }, []);
 
-  // carrega histórico + escuta novas mensagens em tempo real
+  // atualiza o título da aba com o número de mensagens não lidas
+  useEffect(() => {
+    if (naoLidas > 0) {
+      document.title = `(${naoLidas}) nosso bloco`;
+    } else {
+      document.title = "nosso bloco";
+    }
+  }, [naoLidas]);
+
+  // reseta o contador de não lidas ao voltar para a aba
+  useEffect(() => {
+    const limparNaoLidas = () => setNaoLidas(0);
+    window.addEventListener("focus", limparNaoLidas);
+    const onVisibilityChange = () => {
+      if (!document.hidden) setNaoLidas(0);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", limparNaoLidas);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
+  // calcula quem está digitando nos últimos 3.2s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const ativos = Object.entries(typingTimestamps)
+        .filter(([user, time]) => user !== nome && now - time < 3200)
+        .map(([user]) => user);
+
+      setDigitando((prev) => {
+        if (prev.length === ativos.length && prev.every((u, i) => u === ativos[i])) {
+          return prev;
+        }
+        return ativos;
+      });
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [typingTimestamps, nome]);
+
+  // carrega histórico + escuta mensagens, presença e typing em tempo real
   useEffect(() => {
     if (!sala || !URL || !KEY) return;
     const client = createClient(URL, KEY);
@@ -136,32 +222,72 @@ export default function Home() {
         if (data) setMsgs(data as Msg[]);
       });
 
-    const canal = client
-      .channel(`sala:${sala}`)
+    const canal = client.channel(`sala:${sala}`, {
+      config: {
+        broadcast: { self: false },
+        presence: { key: nome || "anônimo" },
+      },
+    });
+    canalRef.current = canal;
+
+    canal
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages_chat", filter: `room=eq.${sala}` },
-        (payload) =>
+        (payload) => {
+          const nova = payload.new as Msg;
           setMsgs((atuais) => {
-            const nova = payload.new as Msg;
             // troca a cópia otimista (tmp) pela real do banco
             const semTmp = atuais.filter(
               (m) => !(m.id.startsWith("tmp-") && m.author === nova.author && m.content === nova.content)
             );
             return semTmp.some((m) => m.id === nova.id) ? semTmp : [...semTmp, nova];
-          })
+          });
+
+          // Notificação de som e aba se a mensagem veio de outra pessoa
+          if (nova.author !== nome) {
+            tocarSomNotificacao();
+            if (document.hidden) {
+              setNaoLidas((n) => n + 1);
+            }
+            // remove o indicador de digitando de quem acabou de enviar
+            setTypingTimestamps((prev) => ({ ...prev, [nova.author]: 0 }));
+          }
+        }
       )
-      .subscribe();
+      .on("broadcast", { event: "typing" }, ({ payload }) => {
+        if (payload?.user && payload.user !== nome) {
+          setTypingTimestamps((prev) => ({
+            ...prev,
+            [payload.user]: payload.typing ? Date.now() : 0,
+          }));
+        }
+      })
+      .on("presence", { event: "sync" }, () => {
+        const state = canal.presenceState<{ user: string }>();
+        const users = Object.values(state)
+          .flat()
+          .map((p) => p.user)
+          .filter(Boolean);
+        const unicos = Array.from(new Set(users));
+        setUsuariosOnline(unicos);
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED" && nome) {
+          await canal.track({ user: nome });
+        }
+      });
 
     return () => {
+      canalRef.current = null;
       client.removeChannel(canal);
     };
-  }, [sala]);
+  }, [sala, nome]);
 
-  // rola pro fim quando chega mensagem
+  // rola pro fim quando chega mensagem ou alguém está digitando
   useEffect(() => {
-    fim.current?.scrollIntoView();
-  }, [msgs]);
+    fim.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, digitando]);
 
   // colar imagem da área de transferência (Ctrl+V / Cmd+V) e fechar lightbox com Esc
   useEffect(() => {
@@ -255,9 +381,37 @@ export default function Home() {
     setCopiado(true);
   }
 
+  function avisarDigitando(estaDigitando: boolean) {
+    if (!canalRef.current || !nome) return;
+    canalRef.current.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { user: nome, typing: estaDigitando },
+    });
+  }
+
+  function handleTextoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setTexto(e.target.value);
+    if (!nome) return;
+
+    const now = Date.now();
+    if (now - lastTypingSentRef.current > 1200) {
+      avisarDigitando(true);
+      lastTypingSentRef.current = now;
+    }
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      avisarDigitando(false);
+    }, 2200);
+  }
+
   async function enviar() {
     const textoLimpo = texto.trim();
     if ((!textoLimpo && !fotoAnexada) || !sala || !nome || !sb.current || processandoFoto) return;
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    avisarDigitando(false);
 
     const conteudo = fotoAnexada
       ? JSON.stringify({
@@ -340,6 +494,19 @@ export default function Home() {
       }}
     >
       <div className="topo" />
+      <div className="topo-info">
+        <div
+          className="online-badge"
+          title={usuariosOnline.length > 0 ? `Na sala: ${usuariosOnline.join(", ")}` : "Você está na sala"}
+        >
+          <span className="online-ponto" />
+          <span>
+            {usuariosOnline.length <= 1
+              ? "só você online"
+              : `${usuariosOnline.length} online`}
+          </span>
+        </div>
+      </div>
       <button className="sair" onClick={sairDaSala}>sair</button>
 
       {/* Overlay ao arrastar uma foto para o chat */}
@@ -401,6 +568,22 @@ export default function Home() {
                 </div>
               );
             })}
+
+            {/* Indicador de alguém digitando */}
+            {digitando.length > 0 && (
+              <div className="msg-digitando-wrap">
+                <div className="msg ela msg-digitando">
+                  <span className="ponto-digitando" />
+                  <span className="ponto-digitando" />
+                  <span className="ponto-digitando" />
+                </div>
+                <span className="texto-digitando">
+                  {digitando.length === 1
+                    ? `${digitando[0]} está digitando...`
+                    : `${digitando.join(", ")} estão digitando...`}
+                </span>
+              </div>
+            )}
             <div ref={fim} />
           </div>
 
@@ -458,7 +641,7 @@ export default function Home() {
             <input
               className="campo"
               value={texto}
-              onChange={(e) => setTexto(e.target.value)}
+              onChange={handleTextoChange}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && enviar()}
               placeholder={fotoAnexada ? "adicionar legenda (opcional)..." : "escreve aqui (ou cole uma foto)"}
             />
