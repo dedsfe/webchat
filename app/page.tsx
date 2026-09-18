@@ -149,7 +149,7 @@ function AudioPlayer({
             <rect x="14" y="4" width="4" height="16" rx="1.5" />
           </svg>
         ) : (
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: "1.5px" }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: "1px" }}>
             <path d="M6 4l14 8-14 8V4z" />
           </svg>
         )}
