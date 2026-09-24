@@ -8,6 +8,7 @@ export type GymCheckin = {
   date: string;
   minutes?: number;
   note?: string;
+  photo?: string; // data URL; obrigatória em registros novos, ausente nos antigos
 };
 
 export type GymGoal = { type: "gym_goal"; target: number };
@@ -53,6 +54,7 @@ export function parseGymContent(content: string): GymContent | null {
         activity: item.activity as GymActivity,
         minutes: typeof item.minutes === "number" && item.minutes > 0 && item.minutes <= 600 ? item.minutes : undefined,
         note: typeof item.note === "string" ? item.note.slice(0, 180) : undefined,
+        photo: typeof item.photo === "string" && item.photo.startsWith("data:image/") ? item.photo : undefined,
       };
     }
     if (item.type === "gym_goal" && typeof item.target === "number" && Number.isInteger(item.target) && item.target >= 1 && item.target <= 7) {

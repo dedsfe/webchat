@@ -2682,6 +2682,28 @@ body {
 .gym-form textarea:focus,
 .gym-goal select:focus { border-color: #3b7047; }
 .gym-note-label { margin-top: 14px; }
+.gym-photo-pick { position: relative; margin-top: 14px; cursor: pointer; }
+.gym-photo-pick input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; min-height: 0; }
+.gym-photo-empty {
+  display: grid;
+  place-items: center;
+  min-height: 96px;
+  border: 1.5px dashed #b9cdb9;
+  border-radius: 12px;
+  background: #f4f8f3;
+  color: #4d6553;
+  font-weight: 500;
+  text-align: center;
+  padding: 12px;
+}
+.gym-photo-pick img { display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 12px; }
+.gym-photo-change {
+  position: absolute; right: 8px; bottom: 8px;
+  padding: 5px 10px; border-radius: 999px;
+  background: rgba(20, 40, 26, .72); color: #fff; font-size: 12px; font-weight: 600;
+}
+.gym-photo-error { margin-top: 6px; color: #b3261e; font-size: 12px; }
+.gym-message-photo { display: block; width: 100%; max-height: 260px; object-fit: cover; border-radius: 10px; margin-top: 9px; }
 .gym-form textarea { resize: vertical; line-height: 1.4; }
 .gym-submit {
   width: 100%;

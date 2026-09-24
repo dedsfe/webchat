@@ -1847,6 +1847,7 @@ export default function Home() {
                       <div className={`gym-message ${souEu ? "gym-message-me" : ""}`}>
                         <div className="gym-message-top"><span aria-hidden="true">↗</span><strong>{souEu ? "Você treinou" : `${m.author} treinou`}</strong><time>{formatarHora(m.created_at)}</time></div>
                         <div className="gym-message-main"><span>{parsed.gym.activity}</span>{parsed.gym.minutes && <span>{parsed.gym.minutes} min</span>}</div>
+                        {parsed.gym.photo && <img className="gym-message-photo" src={parsed.gym.photo} alt={`Foto do treino de ${souEu ? "você" : m.author}`} loading="lazy" />}
                         <p>{new Date(`${parsed.gym.date}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "short" })}{parsed.gym.note ? ` · ${parsed.gym.note}` : ""}</p>
                         {souEu && !m.id.startsWith("tmp-") && <button type="button" className="gym-remove" onClick={() => removerTreino(m)}>Remover registro</button>}
                       </div>
@@ -2293,6 +2294,7 @@ export default function Home() {
           messages={gymEvents}
           onClose={fecharGym}
           onCheckin={registrarTreino}
+          preparePhoto={otimizarImagem}
           onGoalChange={(target) => enviarEventoGym({ type: "gym_goal", target })}
         />
       )}

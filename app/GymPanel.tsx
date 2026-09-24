@@ -19,11 +19,12 @@ type GymPanelProps = {
   onClose: () => void;
   onCheckin: (workout: GymCheckin) => Promise<boolean>;
   onGoalChange: (target: number) => Promise<boolean>;
+  preparePhoto: (file: File) => Promise<string>;
 };
 
 const DAYS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 
-export default function GymPanel({ name, participants, messages, onClose, onCheckin, onGoalChange }: GymPanelProps) {
+export default function GymPanel({ name, participants, messages, onClose, onCheckin, onGoalChange, preparePhoto }: GymPanelProps) {
   const today = new Date();
   const todayKey = localDate(today);
   const dates = weekDates(today);
@@ -33,6 +34,9 @@ export default function GymPanel({ name, participants, messages, onClose, onChec
   const [date, setDate] = useState(todayKey);
   const [minutes, setMinutes] = useState("");
   const [note, setNote] = useState("");
+  const [photo, setPhoto] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const [goal, setGoal] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
@@ -52,7 +56,7 @@ export default function GymPanel({ name, participants, messages, onClose, onChec
 
   async function saveWorkout(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!dates.includes(date) || date > todayKey || saving) return;
+    if (!dates.includes(date) || date > todayKey || saving || !photo) return;
     setSaving(true);
     const result = await onCheckin({
       type: "gym_checkin",
@@ -60,8 +64,23 @@ export default function GymPanel({ name, participants, messages, onClose, onChec
       date,
       minutes: minutes ? Number(minutes) : undefined,
       note: note.trim().slice(0, 180) || undefined,
+      photo,
     });
     if (!result) setSaving(false);
+  }
+
+  async function pickPhoto(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setPhotoBusy(true);
+    setPhotoError("");
+    try {
+      setPhoto(await preparePhoto(file));
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "Não deu pra usar essa foto.");
+    }
+    setPhotoBusy(false);
   }
 
   async function saveGoal() {
@@ -126,8 +145,15 @@ export default function GymPanel({ name, participants, messages, onClose, onChec
               <label><span className="gym-field-title">Dia</span><input type="date" lang="pt-BR" value={date} min={dates[0]} max={todayKey} onChange={(event) => setDate(event.target.value)} required /></label>
               <label><span className="gym-field-title">Minutos <em>(opcional)</em></span><input type="number" min="1" max="600" inputMode="numeric" value={minutes} onChange={(event) => setMinutes(event.target.value)} placeholder="45" /></label>
             </div>
+            <label className={`gym-photo-pick ${photo ? "has-photo" : ""}`}>
+              <span className="gym-field-title">Foto do treino</span>
+              {photo ? <img src={photo} alt="Foto do treino" /> : <span className="gym-photo-empty">{photoBusy ? "Carregando..." : "Toque pra tirar ou escolher uma foto"}</span>}
+              {photo && <span className="gym-photo-change">Trocar foto</span>}
+              <input type="file" accept="image/*" onChange={pickPhoto} disabled={photoBusy} />
+            </label>
+            {photoError && <p className="gym-photo-error" role="alert">{photoError}</p>}
             <label className="gym-note-label"><span className="gym-field-title">Uma nota para vocês <em>(opcional)</em></span><textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={180} rows={2} placeholder="Como foi o treino?" /></label>
-            <button type="submit" className="gym-submit" disabled={saving || !date || date > todayKey || date < dates[0]}>{saving ? "Salvando..." : "Registrar no chat"}</button>
+            <button type="submit" className="gym-submit" disabled={saving || photoBusy || !photo || !date || date > todayKey || date < dates[0]}>{saving ? "Salvando..." : photo ? "Registrar no chat" : "Adicione a foto pra registrar"}</button>
           </form>
 
           <div className="gym-goal">
