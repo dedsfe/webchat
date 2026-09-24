@@ -5,7 +5,6 @@ import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 export type ChatRoom = { id: string; title: string; invite_code: string; created_at: string };
 const publicSignup = process.env.NEXT_PUBLIC_ALLOW_SIGNUP === "true";
-const passwordResetEmail = process.env.NEXT_PUBLIC_ALLOW_PASSWORD_RESET === "true";
 
 type Props = {
   client: SupabaseClient;
@@ -202,9 +201,9 @@ export default function AccessGate({ client, user, inviteCode, legacyCode, recov
               {error && <p className="access-feedback error" role="alert">{error}</p>}
               {notice && <p className="access-feedback" role="status">{notice}</p>}
               <button className="access-primary" disabled={busy} type="submit">{busy ? "Aguarde..." : mode === "signup" ? "Criar minha conta" : mode === "reset" ? "Enviar link" : "Entrar"}</button>
-              {(passwordResetEmail || mode === "reset") && <button type="button" className="access-text-button" onClick={() => { setMode(mode === "reset" ? "login" : "reset"); setError(""); setNotice(""); }}>
+              <button type="button" className="access-text-button" onClick={() => { setMode(mode === "reset" ? "login" : "reset"); setError(""); setNotice(""); }}>
                 {mode === "reset" ? "Voltar para entrar" : "Esqueci minha senha"}
-              </button>}
+              </button>
             </form>
           </section>
         ) : (
