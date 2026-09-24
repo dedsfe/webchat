@@ -563,11 +563,25 @@ function AudioPlayer({
 }
 
 
+// Em base64 vira ~950 KB, perto do limite que o Realtime entrega sem cortar.
+const GIF_MAX_BYTES = 700 * 1024;
+
 // Otimiza com canvas para resolução Full HD+ e formato WebP leve (~120KB-250KB)
 async function otimizarImagem(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!file.type.startsWith("image/")) {
       return reject(new Error("O arquivo selecionado não é uma imagem válida."));
+    }
+    // GIF passa direto: o canvas guardaria só o primeiro quadro e mataria a animação.
+    if (file.type === "image/gif") {
+      if (file.size > GIF_MAX_BYTES) {
+        return reject(new Error("GIF muito grande. Escolha um de até 700 KB."));
+      }
+      const gifReader = new FileReader();
+      gifReader.onload = () => resolve(gifReader.result as string);
+      gifReader.onerror = () => reject(new Error("Erro ao abrir o GIF."));
+      gifReader.readAsDataURL(file);
+      return;
     }
     const reader = new FileReader();
     reader.onload = (e) => {
