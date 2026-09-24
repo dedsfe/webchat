@@ -1,12 +1,34 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import AccessGate, { type ChatRoom } from "./AccessGate";
+import GymPanel from "./GymPanel";
+import { parseGymContent, type GymCheckin, type GymContent } from "./gym";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+let browserClient: SupabaseClient | null = null;
 
-type Msg = { id: string; author: string; content: string; created_at: string };
+function getBrowserClient(): SupabaseClient | null {
+  if (typeof window === "undefined" || !SUPABASE_URL || !KEY) return null;
+  if (!browserClient) browserClient = createClient(SUPABASE_URL, KEY, {
+    auth: { persistSession: true, autoRefreshToken: true },
+  });
+  return browserClient;
+}
+
+type Msg = { id: string; author: string; content: string; created_at: string; user_id?: string | null };
+
+function mergeLoadedMessages(loaded: Msg[], current: Msg[]): Msg[] {
+  return [
+    ...loaded,
+    ...current.filter((message) => !loaded.some((item) =>
+      item.id === message.id ||
+      (message.id.startsWith("tmp-") && item.author === message.author && item.content === message.content)
+    )),
+  ];
+}
 
 type FileInfo = {
   name: string;
@@ -32,7 +54,7 @@ export type LinkPreview = {
 };
 
 type ParsedMsg = {
-  type: "text" | "image" | "audio" | "file";
+  type: "text" | "image" | "audio" | "file" | GymContent["type"];
   text?: string;
   image?: string;
   images?: string[];
@@ -42,9 +64,19 @@ type ParsedMsg = {
   reactions?: Record<string, string[]>;
   replyTo?: ReplyInfo;
   linkPreview?: LinkPreview;
+  gym?: GymContent;
 };
 
 function parseContent(content: string): ParsedMsg {
+  const gym = parseGymContent(content);
+  if (gym) {
+    try {
+      const raw = JSON.parse(content) as { reactions?: Record<string, string[]> };
+      return { type: gym.type, gym, reactions: raw.reactions };
+    } catch {
+      return { type: gym.type, gym };
+    }
+  }
   if (content.startsWith("data:image/")) {
     return { type: "image", image: content, images: [content], text: "" };
   }
@@ -89,6 +121,15 @@ function formatarTamanho(bytes: number): string {
 
 function extrairResumo(content: string): { resumo: string; type: "text" | "image" | "audio" | "file" } {
   const parsed = parseContent(content);
+  if (parsed.gym?.type === "gym_checkin") {
+    return { resumo: `Treino: ${parsed.gym.activity}`, type: "text" };
+  }
+  if (parsed.gym?.type === "gym_goal") {
+    return { resumo: `Meta: ${parsed.gym.target} treinos por semana`, type: "text" };
+  }
+  if (parsed.gym?.type === "gym_deleted") {
+    return { resumo: "Treino removido", type: "text" };
+  }
   if (parsed.type === "image") {
     const count = parsed.images && parsed.images.length > 1 ? ` (${parsed.images.length} fotos)` : "";
     return { resumo: parsed.text ? `📷 ${parsed.text}` : `📷 Foto${count}`, type: "image" };
@@ -606,17 +647,16 @@ function tocarSomNotificacao() {
   }
 }
 
-function novaSala() {
-  return crypto.randomUUID().replace(/-/g, "").slice(0, 10);
-}
-
 export default function Home() {
   const [sala, setSala] = useState<string | null>(null);
   const [nome, setNome] = useState<string | null>(null);
-  const [nomeDigitado, setNomeDigitado] = useState("");
-  const [codigo, setCodigo] = useState("");
-  const [salaCriada, setSalaCriada] = useState<string | null>(null);
-  const [copiado, setCopiado] = useState(false);
+  const [client, setClient] = useState<SupabaseClient | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [activeRoom, setActiveRoom] = useState<ChatRoom | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [legacyCode, setLegacyCode] = useState<string | null>(null);
   const [copiadoSala, setCopiadoSala] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [texto, setTexto] = useState("");
@@ -640,9 +680,14 @@ export default function Home() {
   const [resultadoIndex, setResultadoIndex] = useState(0);
   const [mostrarBotaoDescer, setMostrarBotaoDescer] = useState(false);
   const [novasMensagensAbaixo, setNovasMensagensAbaixo] = useState(0);
+  const [menuMaisAberto, setMenuMaisAberto] = useState(false);
+  const [gymAberto, setGymAberto] = useState(false);
+  const [gymEvents, setGymEvents] = useState<Msg[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileDocInputRef = useRef<HTMLInputElement>(null);
+  const firstMenuItemRef = useRef<HTMLButtonElement>(null);
+  const plusRef = useRef<HTMLButtonElement>(null);
   const inputMsgRef = useRef<HTMLInputElement>(null);
   const inputBuscaRef = useRef<HTMLInputElement>(null);
   const msgsContainerRef = useRef<HTMLDivElement>(null);
@@ -655,6 +700,10 @@ export default function Home() {
   const audioChunksRef = useRef<Blob[]>([]);
   const gravandoTimerRef = useRef<NodeJS.Timeout | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    if (menuMaisAberto) firstMenuItemRef.current?.focus();
+  }, [menuMaisAberto]);
 
   function abrirLightbox(images: string[], index: number = 0) {
     setLightboxState({ images, index });
@@ -748,7 +797,7 @@ export default function Home() {
       const idTemp = "tmp-" + crypto.randomUUID();
       setMsgs((atuais) => [
         ...atuais,
-        { id: idTemp, author: nome!, content: conteudo, created_at: new Date().toISOString() },
+        { id: idTemp, author: nome!, content: conteudo, created_at: new Date().toISOString(), user_id: user?.id },
       ]);
 
       const { error } = await sb.current!.from("messages_chat").insert({
@@ -817,21 +866,50 @@ export default function Home() {
     return () => window.removeEventListener("click", fecharSeletor);
   }, []);
 
-  // se a URL tem sala (?r=abc123) entra direto e memoriza; senão volta pra sala memorizada
+  // A sessão do Supabase persiste no navegador; a sala só abre após verificar
+  // a associação da conta no banco. O código antigo nunca concede acesso direto.
   useEffect(() => {
-    const r = new URLSearchParams(window.location.search).get("r");
-    if (r) {
-      setSala(r);
-      localStorage.setItem("minha-sala", r);
-    } else {
-      const salva = localStorage.getItem("minha-sala");
-      if (salva) {
-        window.history.replaceState(null, "", `?r=${salva}`);
-        setSala(salva);
-      }
-    }
-    setNome(localStorage.getItem("meu-nome"));
+    const params = new URLSearchParams(window.location.search);
+    setInviteCode(params.get("invite"));
+    setLegacyCode(params.get("r") || localStorage.getItem("minha-sala"));
+    const authClient = getBrowserClient();
+    if (!authClient) { setAuthReady(true); return; }
+    sb.current = authClient;
+    setClient(authClient);
+    let mounted = true;
+    const { data: { subscription } } = authClient.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
+      authClient.realtime.setAuth(session?.access_token || "");
+      setUser(session?.user || null);
+      setAuthReady(true);
+      if (!session) { setSala(null); setActiveRoom(null); setNome(null); }
+    });
+    void authClient.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setUser(data.session?.user || null);
+      setAuthReady(true);
+    });
+    return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
+
+  useEffect(() => {
+    if (!client || !user || activeRoom || inviteCode || recoveryMode) return;
+    if (new URLSearchParams(window.location.search).has("r")) return;
+    const saved = localStorage.getItem(`active-room-${user.id}`);
+    if (!saved) return;
+    let cancelled = false;
+    void Promise.all([
+      client.from("chat_rooms").select("id,title,invite_code,created_at").eq("id", saved).maybeSingle(),
+      client.from("room_members").select("display_name").eq("room_id", saved).eq("user_id", user.id).maybeSingle(),
+    ]).then(([roomResult, memberResult]) => {
+      if (cancelled || !roomResult.data || !memberResult.data) return;
+      setActiveRoom(roomResult.data as ChatRoom);
+      setSala(saved);
+      setNome(memberResult.data.display_name);
+    });
+    return () => { cancelled = true; };
+  }, [client, user, activeRoom, inviteCode, recoveryMode]);
 
   // atualiza o título da aba com o número de mensagens não lidas
   useEffect(() => {
@@ -877,9 +955,8 @@ export default function Home() {
 
   // carrega histórico + escuta mensagens, presença e typing em tempo real
   useEffect(() => {
-    if (!sala || !SUPABASE_URL || !KEY) return;
-    const client = createClient(SUPABASE_URL, KEY);
-    sb.current = client;
+    if (!sala || !nome || !client || !user) return;
+    let active = true;
 
     // carrega mensagem fixada salva
     const pinSalvo = localStorage.getItem(`pin-${sala}`);
@@ -887,18 +964,46 @@ export default function Home() {
 
     client
       .from("messages_chat")
-      .select("id, author, content, created_at")
+      .select("id, author, content, created_at, user_id")
       .eq("room", sala)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(300)
       .then(({ data }) => {
-        if (data) setMsgs(data as Msg[]);
+        if (active && data) setMsgs((current) => mergeLoadedMessages((data as Msg[]).reverse(), current));
+      });
+
+    // O placar usa todos os registros de treino recentes, mesmo quando as
+    // mensagens normais já saíram da janela de histórico do chat.
+    client
+      .from("messages_chat")
+      .select("id, author, content, created_at, user_id")
+      .eq("room", sala)
+      .like("content", '{"type":"gym_%')
+      .order("created_at", { ascending: false })
+      .limit(1000)
+      .then(({ data }) => {
+        if (active && data) setGymEvents((current) => {
+          const loaded = data as Msg[];
+          return mergeLoadedMessages(loaded, current);
+        });
+      });
+    // A meta pode ter sido definida há mais tempo que os últimos 1000 treinos.
+    client
+      .from("messages_chat")
+      .select("id, author, content, created_at, user_id")
+      .eq("room", sala)
+      .like("content", '{"type":"gym_goal"%')
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (active && data?.[0]) setGymEvents((current) => mergeLoadedMessages([data[0] as Msg], current));
       });
 
     const canal = client.channel(`sala:${sala}`, {
       config: {
+        private: true,
         broadcast: { self: false },
-        presence: { key: nome || "anônimo" },
+        presence: { key: user.id },
       },
     });
     canalRef.current = canal;
@@ -916,9 +1021,15 @@ export default function Home() {
             );
             return semTmp.some((m) => m.id === nova.id) ? semTmp : [...semTmp, nova];
           });
+          if (parseGymContent(nova.content)) {
+            setGymEvents((current) => {
+              const withoutTemp = current.filter((event) => !(event.id.startsWith("tmp-") && event.author === nova.author && event.content === nova.content));
+              return withoutTemp.some((event) => event.id === nova.id) ? withoutTemp : [...withoutTemp, nova];
+            });
+          }
 
           // Notificação de som e aba se a mensagem veio de outra pessoa
-          if (nova.author !== nome) {
+          if (nova.user_id !== user.id) {
             tocarSomNotificacao();
             if (document.hidden) {
               setNaoLidas((n) => n + 1);
@@ -934,6 +1045,7 @@ export default function Home() {
         (payload) => {
           const atualizada = payload.new as Msg;
           setMsgs((atuais) => atuais.map((m) => (m.id === atualizada.id ? atualizada : m)));
+          setGymEvents((current) => current.map((event) => event.id === atualizada.id ? atualizada : event));
         }
       )
       .on("broadcast", { event: "typing" }, ({ payload }) => {
@@ -967,10 +1079,12 @@ export default function Home() {
       });
 
     return () => {
+      active = false;
       canalRef.current = null;
       client.removeChannel(canal);
+      setGymEvents([]);
     };
-  }, [sala, nome]);
+  }, [sala, nome, client, user]);
 
   // rola pro fim quando chega mensagem ou alguém está digitando
   useEffect(() => {
@@ -981,7 +1095,7 @@ export default function Home() {
     const { scrollTop, scrollHeight, clientHeight } = msgsContainerRef.current;
     const distDoFim = scrollHeight - scrollTop - clientHeight;
     const ultimaMsg = msgs[msgs.length - 1];
-    const souEu = ultimaMsg?.author === nome;
+    const souEu = ultimaMsg?.user_id === user?.id || (!ultimaMsg?.user_id && ultimaMsg?.author === nome);
 
     if (distDoFim <= 180 || souEu) {
       fim.current?.scrollIntoView({ behavior: "smooth" });
@@ -991,7 +1105,7 @@ export default function Home() {
       setNovasMensagensAbaixo((n) => n + 1);
       setMostrarBotaoDescer(true);
     }
-  }, [msgs, nome]);
+  }, [msgs, nome, user]);
 
   useEffect(() => {
     if (!msgsContainerRef.current) return;
@@ -1035,6 +1149,9 @@ export default function Home() {
         return;
       }
       if (e.key === "Escape") {
+        if (menuMaisAberto) requestAnimationFrame(() => plusRef.current?.focus());
+        setMenuMaisAberto(false);
+        if (gymAberto) fecharGym();
         setBuscaAtiva(false);
         setTermoBusca("");
         setLightboxState(null);
@@ -1060,7 +1177,7 @@ export default function Home() {
       window.removeEventListener("paste", handlePaste);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [sala, nome]);
+  }, [sala, nome, gymAberto, menuMaisAberto]);
 
   async function carregarFotos(files: File[] | FileList) {
     const lista = Array.from(files).filter((f) => f.type.startsWith("image/"));
@@ -1165,7 +1282,7 @@ export default function Home() {
         const idTemp = "tmp-" + crypto.randomUUID();
         setMsgs((atuais) => [
           ...atuais,
-          { id: idTemp, author: nome, content: conteudo, created_at: new Date().toISOString() },
+          { id: idTemp, author: nome, content: conteudo, created_at: new Date().toISOString(), user_id: user?.id },
         ]);
 
         const { error } = await sb.current!
@@ -1219,6 +1336,8 @@ export default function Home() {
         duration: parsed.duration,
         reactions: reacoesAtuais,
       });
+    } else if (parsed.gym) {
+      novoConteudo = JSON.stringify({ ...JSON.parse(alvo.content), reactions: reacoesAtuais });
     } else {
       novoConteudo = JSON.stringify({
         type: "text",
@@ -1237,62 +1356,27 @@ export default function Home() {
       .eq("id", msgId);
   }
 
-  function salvarNome() {
-    const limpo = nomeDigitado.trim();
-    if (!limpo) return;
-    localStorage.setItem("meu-nome", limpo);
-    setNome(limpo);
-  }
-
-  function criarSala() {
-    const novo = novaSala();
-    setSalaCriada(novo);
-    setCopiado(false);
-  }
-
-  function entrarNaCriada() {
-    if (!salaCriada) return;
-    window.history.replaceState(null, "", `?r=${salaCriada}`);
-    localStorage.setItem("minha-sala", salaCriada);
-    setSala(salaCriada);
-  }
-
-  function entrarComCodigo() {
-    const limpo = codigo.trim();
-    if (!limpo) return;
-    window.history.replaceState(null, "", `?r=${limpo}`);
-    localStorage.setItem("minha-sala", limpo);
-    setSala(limpo);
-  }
-
   function sairDaSala() {
-    if (!window.confirm("sair da sala?")) return;
-    localStorage.removeItem("minha-sala");
-    localStorage.removeItem("meu-nome");
-    // limpa o ?r= da URL antes de qualquer coisa: se ele ficar, o reload
-    // reentra na mesma sala e parece que o "sair" não funcionou
+    if (user) localStorage.removeItem(`active-room-${user.id}`);
     window.history.replaceState(null, "", window.location.pathname);
-    // sai por estado (funciona mesmo em PWA/standalone, sem depender de reload)
     try {
       canalRef.current?.unsubscribe();
     } catch {}
     canalRef.current = null;
     setSala(null);
+    setActiveRoom(null);
     setNome(null);
-    setSalaCriada(null);
-    setCodigo("");
+    setInviteCode(null);
+    setMsgs([]);
+    setGymEvents([]);
+    setMenuMaisAberto(false);
+    setGymAberto(false);
   }
 
-  async function copiarLink() {
-    if (!salaCriada) return;
-    await navigator.clipboard.writeText(`${window.location.origin}/?r=${salaCriada}`);
-    setCopiado(true);
-  }
-
-  // copia o link da sala de dentro da sala (sem sair de nada)
+  // O convite contém um segredo aleatório, diferente do ID interno da sala.
   async function copiarLinkDaSala() {
-    if (!sala) return;
-    const link = `${window.location.origin}/?r=${sala}`;
+    if (!activeRoom) return;
+    const link = `${window.location.origin}/?invite=${activeRoom.invite_code}`;
     try {
       await navigator.clipboard.writeText(link);
     } catch {
@@ -1374,7 +1458,7 @@ export default function Home() {
 
     // mostra na hora; o echo do realtime é ignorado pelo dedup de id
     const idTemp = "tmp-" + crypto.randomUUID();
-    setMsgs((atuais) => [...atuais, { id: idTemp, author: nome, content: conteudo, created_at: new Date().toISOString() }]);
+    setMsgs((atuais) => [...atuais, { id: idTemp, author: nome, content: conteudo, created_at: new Date().toISOString(), user_id: user?.id }]);
     const { error } = await sb.current.from("messages_chat").insert({ room: sala, author: nome, content: conteudo });
     if (error) {
       setMsgs((atuais) => atuais.filter((m) => m.id !== idTemp));
@@ -1382,45 +1466,78 @@ export default function Home() {
     }
   }
 
-  if (!sala) {
-    return (
-      <div className="entrada-wrap">
-        <div className="entrada">
-          {salaCriada === null ? (
-            <>
-              <h1>nosso bloco</h1>
-              <p className="sub">converse com quem você quiser, sem login</p>
-              <button className="btn-grande btn-azul" onClick={criarSala}>criar uma sala</button>
-              <div className="divisor">ou entre com um código</div>
-              <div className="entrar-codigo">
-                <input
-                  className="campo"
-                  value={codigo}
-                  onChange={(e) => setCodigo(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && entrarComCodigo()}
-                  placeholder="código da sala"
-                />
-                <button className="btn-grande btn-cinza" onClick={entrarComCodigo} disabled={!codigo.trim()}>
-                  entrar
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <h1>sala pronta!</h1>
-              <p className="sub">manda esse link pra quem você quer conversar</p>
-              <div className="link-pronto">
-                <code>{`${typeof window !== "undefined" ? window.location.origin : ""}/?r=${salaCriada}`}</code>
-                <button className="btn-grande btn-cinza" onClick={copiarLink}>
-                  {copiado ? "copiado!" : "copiar link"}
-                </button>
-              </div>
-              <button className="btn-grande btn-azul" onClick={entrarNaCriada}>entrar na sala</button>
-            </>
-          )}
-        </div>
-      </div>
-    );
+  async function enviarEventoGym(evento: GymContent): Promise<boolean> {
+    if (!sala || !nome || !sb.current) {
+      alert("Sem conexão com o chat. Recarregue a página e tente novamente.");
+      return false;
+    }
+    const content = JSON.stringify(evento);
+    const optimistic: Msg = {
+      id: `tmp-${crypto.randomUUID()}`,
+      author: nome,
+      content,
+      created_at: new Date().toISOString(),
+      user_id: user?.id,
+    };
+    setMsgs((current) => [...current, optimistic]);
+    setGymEvents((current) => [...current, optimistic]);
+    const { error } = await sb.current.from("messages_chat").insert({ room: sala, author: nome, content });
+    if (error) {
+      setMsgs((current) => current.filter((message) => message.id !== optimistic.id));
+      setGymEvents((current) => current.filter((message) => message.id !== optimistic.id));
+      alert(`Não foi possível salvar o treino: ${error.message}`);
+      return false;
+    }
+    return true;
+  }
+
+  async function registrarTreino(workout: GymCheckin): Promise<boolean> {
+    const saved = await enviarEventoGym(workout);
+    if (saved) fecharGym();
+    return saved;
+  }
+
+  function fecharGym() {
+    setGymAberto(false);
+    requestAnimationFrame(() => plusRef.current?.focus());
+  }
+
+  async function removerTreino(message: Msg) {
+    if ((message.user_id ? message.user_id !== user?.id : message.author !== nome) || message.id.startsWith("tmp-") || !sb.current) return;
+    if (!window.confirm("Remover este registro de treino?")) return;
+    const updated = { ...message, content: JSON.stringify({ type: "gym_deleted" }) };
+    setMsgs((current) => current.map((item) => item.id === message.id ? updated : item));
+    setGymEvents((current) => current.map((item) => item.id === message.id ? updated : item));
+    const { error } = await sb.current.from("messages_chat").update({ content: updated.content }).eq("id", message.id);
+    if (error) {
+      setMsgs((current) => current.map((item) => item.id === message.id ? message : item));
+      setGymEvents((current) => current.map((item) => item.id === message.id ? message : item));
+      alert(`Não foi possível remover o treino: ${error.message}`);
+    }
+  }
+
+  if (!authReady) return <div className="access-loading">Abrindo nosso bloco...</div>;
+  if (!client) return <div className="access-loading">Configure o Supabase para usar o chat.</div>;
+  if (!sala || !user || !activeRoom || !nome || recoveryMode) {
+    return <AccessGate
+      client={client}
+      user={user}
+      inviteCode={inviteCode}
+      legacyCode={legacyCode}
+      recoveryMode={recoveryMode}
+      onRecoveryDone={() => setRecoveryMode(false)}
+      onEnter={(room, displayName) => {
+        setActiveRoom(room);
+        setSala(room.id);
+        setNome(displayName);
+        setMsgs([]);
+        setInviteCode(null);
+        setLegacyCode(null);
+        localStorage.setItem(`active-room-${user!.id}`, room.id);
+        window.history.replaceState(null, "", window.location.pathname);
+      }}
+      onSignOut={() => { void client.auth.signOut(); sairDaSala(); }}
+    />;
   }
 
   return (
@@ -1449,16 +1566,16 @@ export default function Home() {
       {/* Barra de Navegação Nativa (Estilo iOS / Mobile Nativo) */}
       <header className="app-header-nativo">
         <div className="header-esq">
-          <button className="btn-header-voltar" onClick={sairDaSala} title="Sair da sala">
+          <button className="btn-header-voltar" onClick={sairDaSala} title="Voltar às salas">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
-            <span className="btn-header-voltar-texto">sair</span>
+            <span className="btn-header-voltar-texto">salas</span>
           </button>
         </div>
 
         <div className="header-centro">
-          <span className="header-titulo">nosso bloco</span>
+          <span className="header-titulo">{activeRoom.title}</span>
           <div className="header-subtitulo">
             <span className="header-online-dot" />
             {sala && (
@@ -1466,9 +1583,9 @@ export default function Home() {
                 type="button"
                 className={`header-codigo-sala ${copiadoSala ? "copiado" : ""}`}
                 onClick={copiarLinkDaSala}
-                title="Copiar link da sala"
+                title="Copiar convite da sala"
               >
-                {copiadoSala ? "link copiado!" : `#${sala}`}
+                {copiadoSala ? "convite copiado!" : "convidar"}
               </button>
             )}
             <span className="header-online-status">
@@ -1630,31 +1747,11 @@ export default function Home() {
         </div>
       )}
 
-      {nome === null || !sala ? (
-        <div className="pedir-nome">
-          <p>como você se chama?</p>
-          <div className="input-bar" style={{ paddingTop: 0, paddingBottom: 0 }}>
-            <input
-              className="campo"
-              value={nomeDigitado}
-              onChange={(e) => setNomeDigitado(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && salvarNome()}
-              placeholder="seu nome"
-              autoFocus
-            />
-            <button className="enviar" onClick={salvarNome} disabled={!nomeDigitado.trim()}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
+      <>
           <div className="msgs" ref={msgsContainerRef} onScroll={handleScrollMsgs}>
             {msgs.map((m) => {
               const parsed = parseContent(m.content);
-              const souEu = m.author === nome;
+              const souEu = m.user_id ? m.user_id === user.id : m.author === nome;
               const temReacoes = parsed.reactions && Object.keys(parsed.reactions).length > 0;
               const emojis = ["❤️", "😂", "👍", "🔥", "😮", "🎉"];
               const isResultadoBusca = termoBusca.trim().length > 0 && resultadosBusca.includes(m.id);
@@ -1732,7 +1829,18 @@ export default function Home() {
                     </div>
 
                     {/* Conteúdo da bolha */}
-                    {parsed.type === "image" && (parsed.images || parsed.image) ? (
+                    {parsed.gym?.type === "gym_checkin" ? (
+                      <div className={`gym-message ${souEu ? "gym-message-me" : ""}`}>
+                        <div className="gym-message-top"><span aria-hidden="true">↗</span><strong>{souEu ? "Você treinou" : `${m.author} treinou`}</strong><time>{formatarHora(m.created_at)}</time></div>
+                        <div className="gym-message-main"><span>{parsed.gym.activity}</span>{parsed.gym.minutes && <span>{parsed.gym.minutes} min</span>}</div>
+                        <p>{new Date(`${parsed.gym.date}T12:00:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "short" })}{parsed.gym.note ? ` · ${parsed.gym.note}` : ""}</p>
+                        {souEu && !m.id.startsWith("tmp-") && <button type="button" className="gym-remove" onClick={() => removerTreino(m)}>Remover registro</button>}
+                      </div>
+                    ) : parsed.gym?.type === "gym_goal" ? (
+                      <div className="gym-message gym-message-goal"><div className="gym-message-top"><span aria-hidden="true">↗</span><strong>Meta da semana</strong><time>{formatarHora(m.created_at)}</time></div><p>{parsed.gym.target} {parsed.gym.target === 1 ? "treino" : "treinos"} por pessoa, toda semana.</p></div>
+                    ) : parsed.gym?.type === "gym_deleted" ? (
+                      <div className="gym-message gym-message-deleted">Registro de treino removido.</div>
+                    ) : parsed.type === "image" && (parsed.images || parsed.image) ? (
                       (() => {
                         const imagesList = parsed.images && parsed.images.length > 0 ? parsed.images : [parsed.image!];
                         const isMulti = imagesList.length > 1;
@@ -2037,6 +2145,26 @@ export default function Home() {
             </div>
           )}
 
+          {menuMaisAberto && (
+            <>
+              <button type="button" className="composer-menu-dismiss" aria-label="Fechar menu de adicionar" onClick={() => setMenuMaisAberto(false)} />
+              <div className="composer-menu" id="composer-more-menu" aria-label="Adicionar à conversa">
+                <button type="button" ref={firstMenuItemRef} disabled={processandoFoto} onClick={() => { setMenuMaisAberto(false); fileInputRef.current?.click(); }}>
+                  <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m4 18 6-6 4 3 3-4 4 5"/></svg>
+                  <span><strong>Fotos</strong><small>Compartilhar imagens</small></span>
+                </button>
+                <button type="button" disabled={processandoFoto} onClick={() => { setMenuMaisAberto(false); fileDocInputRef.current?.click(); }}>
+                  <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 11.5 12.3 20a6 6 0 0 1-8.5-8.5L13 2.4a4 4 0 0 1 5.7 5.7l-9.3 9.3a2 2 0 0 1-2.8-2.8L15 6.2"/></svg>
+                  <span><strong>Documento</strong><small>Enviar um arquivo</small></span>
+                </button>
+                <button type="button" onClick={() => { setMenuMaisAberto(false); setGymAberto(true); }}>
+                  <span className="composer-gym-mark" aria-hidden="true">↗</span>
+                  <span><strong>Gym Rats</strong><small>Treinos e meta de vocês</small></span>
+                </button>
+              </div>
+            </>
+          )}
+
           <div className="input-bar-wrap">
             {gravando ? (
               <div className="input-bar input-bar-gravando">
@@ -2095,35 +2223,8 @@ export default function Home() {
                   }}
                 />
 
-                <button
-                  type="button"
-                  className="btn-input-acao"
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Enviar fotos"
-                  disabled={processandoFoto}
-                >
-                  {processandoFoto ? (
-                    <span className="spinner" />
-                  ) : (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="18" height="18" rx="4" ry="4" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <polyline points="21 15 16 10 5 21" />
-                    </svg>
-                  )}
-                </button>
-
-                {/* Botão de anexo de arquivos e documentos */}
-                <button
-                  type="button"
-                  className="btn-input-acao btn-anexo"
-                  onClick={() => fileDocInputRef.current?.click()}
-                  title="Enviar documento"
-                  disabled={processandoFoto}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                  </svg>
+                <button ref={plusRef} type="button" className={`btn-input-acao composer-plus ${menuMaisAberto ? "is-open" : ""}`} onClick={() => setMenuMaisAberto((open) => !open)} title="Adicionar à conversa" aria-label="Adicionar à conversa" aria-expanded={menuMaisAberto} aria-controls="composer-more-menu">
+                  {processandoFoto ? <span className="spinner" /> : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" aria-hidden="true"><path d="M12 4v16M4 12h16" /></svg>}
                 </button>
 
                 <input
@@ -2170,6 +2271,16 @@ export default function Home() {
             )}
           </div>
         </>
+
+      {gymAberto && nome && (
+        <GymPanel
+          name={nome}
+          participants={[nome, ...Array.from(new Set([...gymEvents, ...msgs].map((message) => message.author).filter((author) => author !== nome)))]}
+          messages={gymEvents}
+          onClose={fecharGym}
+          onCheckin={registrarTreino}
+          onGoalChange={(target) => enviarEventoGym({ type: "gym_goal", target })}
+        />
       )}
 
       {/* Visualizador da foto ampliada em tela cheia (Lightbox com galeria) */}

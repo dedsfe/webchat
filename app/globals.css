@@ -15,6 +15,53 @@
   --safe-right: env(safe-area-inset-right, 0px);
 }
 
+/* Entrada e lista de salas: a mesma linguagem calma do chat, com verde do Gym Rats. */
+.access-loading { min-height: 100dvh; display: grid; place-items: center; color: #355247; background: #f4f8f5; font-size: 15px; }
+.access-page { min-height: 100dvh; height: 100dvh; overflow-y: auto; background: #f4f8f5; color: #1b3229; padding: max(38px, var(--safe-top)) 22px max(38px, var(--safe-bottom)); }
+.access-shell { width: min(100%, 480px); margin: 0 auto; }
+.access-heading { margin: 15px 0 28px; }
+.access-mark { display: inline-block; color: #3b7957; font-size: 25px; line-height: 1; margin-bottom: 18px; }
+.access-heading h1 { font-size: clamp(37px, 9vw, 48px); letter-spacing: -.055em; line-height: 1; font-weight: 730; }
+.access-heading p { margin-top: 13px; max-width: 32ch; font-size: 15px; line-height: 1.5; color: #577065; }
+.access-panel { background: #fff; border-radius: 22px; padding: 24px; box-shadow: 0 3px 16px rgba(29, 65, 44, .045); }
+.access-tabs { display: flex; gap: 25px; margin-bottom: 25px; }
+.access-tabs button { border: 0; background: transparent; color: #73867b; font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; padding: 0 0 9px; }
+.access-tabs button.active { color: #1b3229; border-bottom: 2px solid #41835d; }
+.access-form, .access-actions form { display: grid; gap: 17px; }
+.access-form label, .access-actions label, .access-name { display: grid; gap: 7px; font-size: 13px; font-weight: 600; color: #355247; }
+.access-form input, .access-actions input, .access-name input, .access-legacy input { width: 100%; min-height: 47px; border: 1px solid #d2ded5; border-radius: 11px; background: #fbfdfb; color: #1b3229; padding: 0 13px; font: inherit; font-size: 15px; outline: none; }
+.access-form input:focus, .access-actions input:focus, .access-name input:focus, .access-legacy input:focus { border-color: #478765; box-shadow: 0 0 0 3px rgba(71, 135, 101, .13); }
+.access-primary, .access-secondary { min-height: 48px; border: 0; border-radius: 11px; font: inherit; font-weight: 650; font-size: 15px; cursor: pointer; padding: 0 16px; }
+.access-primary { color: #fff; background: #2d6949; }
+.access-primary:hover { background: #245a3d; }
+.access-secondary { color: #275d40; background: #e8f2eb; }
+.access-secondary:hover { background: #dcecdf; }
+.access-primary:disabled, .access-secondary:disabled { opacity: .5; cursor: default; }
+.access-text-button, .access-account button, .access-legacy button { border: 0; background: transparent; font: inherit; color: #397650; cursor: pointer; }
+.access-text-button { justify-self: center; font-size: 13px; padding: 3px; }
+.access-feedback { font-size: 13px; line-height: 1.45; color: #2d6949; }
+.access-feedback.error { color: #a3332c; }
+.access-account { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 25px; color: #62766b; font-size: 12px; }
+.access-account span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.access-account button { flex: none; font-size: 12px; }
+.access-panel h2 { font-size: 24px; letter-spacing: -.035em; margin-bottom: 11px; }
+.access-muted { color: #6b7d70; font-size: 14px; line-height: 1.45; margin: 12px 0 22px; }
+.access-room-list { display: grid; gap: 5px; margin: 0 0 24px; }
+.access-room-list button { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 56px; border: 0; border-radius: 11px; padding: 0 14px; background: #f1f7f2; color: #1b3229; text-align: left; font: inherit; font-size: 15px; font-weight: 610; cursor: pointer; }
+.access-room-list button:hover { background: #e7f1e9; }
+.access-room-list button span:last-child { font-size: 19px; color: #4c8462; }
+.access-actions { display: grid; gap: 23px; padding-top: 9px; }
+.access-actions form { gap: 10px; }
+.access-actions button { width: 100%; }
+.access-name { margin-bottom: 20px; }
+.access-legacy { margin-top: 25px; padding-top: 4px; display: grid; gap: 9px; }
+.access-legacy p { font-size: 14px; font-weight: 600; }
+.access-legacy button { justify-self: start; font-size: 13px; font-weight: 650; padding: 4px 0; }
+.access-password { margin-top: 24px; color: #397650; font-size: 13px; }
+.access-password summary { cursor: pointer; width: fit-content; }
+.access-password .access-form { margin-top: 16px; }
+@media (max-width: 520px) { .access-page { padding-left: 16px; padding-right: 16px; } .access-panel { padding: 21px 18px; } }
+
 * {
   margin: 0;
   padding: 0;
@@ -2381,6 +2428,327 @@ body {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
+}
+
+/* Menu de ações do compositor. A superfície opaca mantém os rótulos legíveis
+   mesmo quando há fotos ou mensagens movimentadas atrás. */
+.composer-plus {
+  color: #59675d;
+}
+.composer-plus.is-open {
+  background: #e2eae3;
+  color: #183d2b;
+}
+.composer-menu-dismiss {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+.composer-menu {
+  position: absolute;
+  bottom: calc(65px + var(--safe-bottom));
+  left: max(12px, calc((100% - 850px) / 2));
+  z-index: 26;
+  width: min(282px, calc(100vw - 24px));
+  padding: 7px;
+  border-radius: 18px;
+  background: #f9fcf9;
+  box-shadow: 0 7px 20px rgba(24, 48, 31, .16);
+}
+.composer-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #314438;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.composer-menu button:hover,
+.composer-menu button:focus-visible {
+  background: #e8f0e9;
+  outline: none;
+}
+.composer-menu button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+.composer-menu svg,
+.composer-gym-mark {
+  flex: 0 0 21px;
+}
+.composer-gym-mark {
+  font-size: 26px;
+  line-height: 21px;
+  font-weight: 700;
+  text-align: center;
+}
+.composer-menu button span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.composer-menu strong {
+  font-size: 15px;
+  font-weight: 650;
+}
+.composer-menu small {
+  font-size: 12px;
+  color: #627468;
+}
+
+/* Gym Rats foi desenhado como um quadro de semana integrado à conversa. */
+.gym-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(16, 33, 22, .35);
+}
+.gym-panel {
+  width: min(520px, 100%);
+  max-height: min(770px, calc(100dvh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #f4f8f3;
+  color: #193426;
+  box-shadow: 0 12px 30px rgba(12, 29, 17, .2);
+}
+.gym-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 23px 24px 19px;
+  background: #dce9dc;
+}
+.gym-header-mark {
+  display: block;
+  width: fit-content;
+  margin-bottom: 8px;
+  font-size: 31px;
+  font-weight: 700;
+  line-height: 27px;
+  color: #396649;
+}
+.gym-header h2 {
+  font-size: clamp(24px, 6vw, 31px);
+  line-height: 1.12;
+  letter-spacing: -.035em;
+  font-weight: 750;
+}
+.gym-header p {
+  margin-top: 7px;
+  color: #526b59;
+  font-size: 13px;
+}
+.gym-close {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border: 0;
+  background: transparent;
+  color: #35513b;
+  font-size: 30px;
+  line-height: 26px;
+  cursor: pointer;
+}
+.gym-close:hover { color: #112a1b; }
+.gym-content {
+  overflow-y: auto;
+  padding: 22px 24px max(24px, var(--safe-bottom));
+}
+.gym-week-head,
+.gym-goal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.gym-week-head strong,
+.gym-goal strong { font-size: 15px; }
+.gym-week-head span,
+.gym-goal p { color: #64796a; font-size: 12px; }
+.gym-days,
+.gym-person {
+  display: grid;
+  grid-template-columns: minmax(62px, 1.7fr) repeat(7, minmax(20px, 1fr)) 38px;
+  align-items: center;
+  gap: 3px;
+}
+.gym-days {
+  margin-top: 18px;
+  margin-bottom: 7px;
+  color: #7b8d80;
+  font-size: 11px;
+  text-align: center;
+}
+.gym-days .gym-today { color: #224b31; font-weight: 750; }
+.gym-person + .gym-person { margin-top: 8px; }
+.gym-person-name {
+  overflow: hidden;
+  color: #2e4735;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gym-day-cell {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #e2e9e0;
+  color: #225332;
+  font-size: 13px;
+  font-weight: 700;
+}
+.gym-day-cell.has-workout { background: #77aa7b; color: #102b19; }
+.gym-day-cell.has-workout.gym-partner { background: #acd29e; }
+.gym-person-score { font-size: 12px; text-align: right; white-space: nowrap; }
+.gym-partner-hint { margin: 13px 0 0; color: #697c6d; font-size: 12px; line-height: 1.4; }
+.gym-form {
+  margin-top: 25px;
+  padding-top: 22px;
+  border-top: 1px solid #d9e3d9;
+}
+.gym-form h3 { font-size: 18px; line-height: 1.3; }
+.gym-activities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 15px;
+}
+.gym-activities button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #e5ece3;
+  color: #3c5542;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.gym-activities button.selected { background: #315d3d; color: #fff; }
+.gym-activities button:focus-visible,
+.gym-goal button:focus-visible,
+.gym-submit:focus-visible,
+.gym-close:focus-visible { outline: 2px solid #193b26; outline-offset: 2px; }
+.gym-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+.gym-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: #3b5140;
+  font-size: 12px;
+  font-weight: 650;
+}
+.gym-form .gym-field-title { color: #3b5140; font-weight: 650; white-space: nowrap; }
+.gym-field-title em { color: #849287; font-style: normal; font-weight: 400; }
+.gym-form input,
+.gym-form textarea,
+.gym-goal select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #cedbce;
+  border-radius: 9px;
+  padding: 9px 11px;
+  background: #fff;
+  color: #193426;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.gym-form input:focus,
+.gym-form textarea:focus,
+.gym-goal select:focus { border-color: #3b7047; }
+.gym-note-label { margin-top: 14px; }
+.gym-form textarea { resize: vertical; line-height: 1.4; }
+.gym-submit {
+  width: 100%;
+  min-height: 43px;
+  margin-top: 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #234e31;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.gym-submit:hover { background: #193e26; }
+.gym-submit:disabled,
+.gym-goal button:disabled { opacity: .5; cursor: default; }
+.gym-goal {
+  align-items: center;
+  margin-top: 23px;
+  padding-top: 20px;
+  border-top: 1px solid #d9e3d9;
+}
+.gym-goal p { margin-top: 4px; line-height: 1.3; }
+.gym-goal-controls { display: flex; gap: 6px; }
+.gym-goal select { width: auto; min-width: 110px; padding: 8px; font-size: 12px; }
+.gym-goal button {
+  border: 0;
+  border-radius: 8px;
+  padding: 0 11px;
+  background: #d9e7d9;
+  color: #21402a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.gym-message {
+  min-width: min(258px, 70vw);
+  max-width: 330px;
+  padding: 13px 15px;
+  border-radius: 16px;
+  background: #e7efe5;
+  color: #203b29;
+}
+.gym-message-me { background: #d4e8d3; }
+.gym-message-top { display: flex; align-items: center; gap: 7px; }
+.gym-message-top > span { color: #366a40; font-size: 20px; line-height: 15px; font-weight: 700; }
+.gym-message-top strong { flex: 1; font-size: 12px; }
+.gym-message-top time { color: #627668; font-size: 10px; }
+.gym-message-main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 20px; font-weight: 750; letter-spacing: -.025em; }
+.gym-message-main span + span { color: #607b63; font-size: 13px; font-weight: 600; letter-spacing: 0; }
+.gym-message p { margin-top: 7px; color: #4d6553; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.gym-remove { margin-top: 9px; border: 0; padding: 0; background: transparent; color: #506f58; font: inherit; font-size: 11px; cursor: pointer; }
+.gym-remove:hover, .gym-remove:focus-visible { color: #143f22; text-decoration: underline; }
+.gym-message-goal p { margin-top: 10px; color: #28432f; font-size: 14px; }
+.gym-message-deleted { min-width: 0; color: #66766a; font-size: 12px; }
+
+@media (max-width: 600px) {
+  .gym-overlay { align-items: flex-end; padding: 0; }
+  .gym-panel { width: 100%; max-height: calc(100dvh - var(--safe-top) - 12px); border-radius: 22px 22px 0 0; }
+  .gym-header { padding: 20px 20px 17px; }
+  .gym-content { padding: 20px 20px max(22px, var(--safe-bottom)); }
+  .gym-goal { align-items: flex-start; flex-direction: column; }
+  .gym-goal-controls { width: 100%; }
+  .gym-goal select { flex: 1; }
+  .gym-goal button { min-width: 76px; }
 }
 
 /* Reply é metadado da mensagem, não um segundo cartão. Ele ocupa uma linha

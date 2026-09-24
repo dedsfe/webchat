@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "nosso bloco",
-  description: "converse com quem você quiser, sem login",
+  description: "Conversas e treinos em uma sala só de vocês.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -17,8 +17,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   viewportFit: "cover",
   themeColor: "#FFFFFF",
 };
