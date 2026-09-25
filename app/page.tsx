@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import AccessGate, { type ChatRoom } from "./AccessGate";
 import GymPanel from "./GymPanel";
+import { useVoiceCalls } from "./useVoiceCalls";
 import { parseGymContent, type GymCheckin, type GymContent } from "./gym";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -714,6 +715,7 @@ export default function Home() {
   const audioChunksRef = useRef<Blob[]>([]);
   const gravandoTimerRef = useRef<NodeJS.Timeout | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const { startVoiceCall, callUi } = useVoiceCalls(client, user, sala, activeRoom?.title);
 
   useEffect(() => {
     if (menuMaisAberto) firstMenuItemRef.current?.focus();
@@ -1533,7 +1535,7 @@ export default function Home() {
   if (!authReady) return <div className="access-loading">Abrindo nosso bloco...</div>;
   if (!client) return <div className="access-loading">Configure o Supabase para usar o chat.</div>;
   if (!sala || !user || !activeRoom || !nome || recoveryMode) {
-    return <AccessGate
+    return <><AccessGate
       client={client}
       user={user}
       inviteCode={inviteCode}
@@ -1551,7 +1553,7 @@ export default function Home() {
         window.history.replaceState(null, "", window.location.pathname);
       }}
       onSignOut={() => { void client.auth.signOut(); sairDaSala(); }}
-    />;
+    />{user && !recoveryMode && callUi}</>;
   }
 
   return (
@@ -1609,6 +1611,17 @@ export default function Home() {
         </div>
 
         <div className="header-dir">
+          <button
+            type="button"
+            className="btn-header-acao btn-header-call"
+            onClick={() => void startVoiceCall()}
+            title="Ligar por voz"
+            aria-label="Ligar por voz"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5.2 3.8 8.4 3l2.2 4.2-2 2.1c1.2 2.5 3.2 4.4 5.8 5.8l2.1-2 4.2 2.2-.8 3.2c-.3 1.1-1.4 1.8-2.5 1.7C10.1 19.4 4.6 13.9 3.5 6.3c-.1-1.1.6-2.2 1.7-2.5Z" />
+            </svg>
+          </button>
           <button
             type="button"
             className={`btn-header-acao ${buscaAtiva ? "ativo" : ""}`}
@@ -2371,6 +2384,7 @@ export default function Home() {
           )}
         </div>
       )}
+      {callUi}
     </div>
   );
 }
