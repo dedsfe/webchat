@@ -28,6 +28,23 @@ function messageFor(error: { message: string } | null): string {
   return error.message;
 }
 
+function isExpiredJwt(error: { message: string } | null): boolean {
+  return !!error && /jwt expired|token is expired/i.test(error.message);
+}
+
+const pendingSessionRefresh = new WeakMap<SupabaseClient, Promise<boolean>>();
+
+function refreshSessionOnce(client: SupabaseClient): Promise<boolean> {
+  const pending = pendingSessionRefresh.get(client);
+  if (pending) return pending;
+  const refresh = client.auth.refreshSession()
+    .then(({ data, error }) => !error && !!data.session)
+    .catch(() => false)
+    .finally(() => pendingSessionRefresh.delete(client));
+  pendingSessionRefresh.set(client, refresh);
+  return refresh;
+}
+
 function extractInvite(value: string): string | null {
   const trimmed = value.trim();
   let code = trimmed;
@@ -60,14 +77,25 @@ export default function AccessGate({ client, user, inviteCode, legacyCode, recov
   const loadRooms = useCallback(async () => {
     if (!user) return;
     setLoadingRooms(true);
-    const [roomResult, memberResult] = await Promise.all([
+    const fetchRooms = () => Promise.all([
       client.from("chat_rooms").select("id,title,invite_code,created_at").order("created_at", { ascending: false }),
       client.from("room_members").select("room_id,display_name").eq("user_id", user.id),
     ]);
-    if (roomResult.error) setError(messageFor(roomResult.error));
-    else setRooms((roomResult.data || []) as ChatRoom[]);
-    if (memberResult.data) {
-      setNames(Object.fromEntries(memberResult.data.map((member) => [member.room_id, member.display_name])));
+    let [roomResult, memberResult] = await fetchRooms();
+    if (isExpiredJwt(roomResult.error) || isExpiredJwt(memberResult.error)) {
+      if (!await refreshSessionOnce(client)) {
+        await client.auth.signOut({ scope: "local" });
+        setLoadingRooms(false);
+        return;
+      }
+      [roomResult, memberResult] = await fetchRooms();
+    }
+    if (roomResult.error || memberResult.error) {
+      setError(messageFor(roomResult.error || memberResult.error));
+    } else {
+      setRooms((roomResult.data || []) as ChatRoom[]);
+      setNames(Object.fromEntries((memberResult.data || []).map((member) => [member.room_id, member.display_name])));
+      setError("");
     }
     setLoadingRooms(false);
   }, [client, user]);
