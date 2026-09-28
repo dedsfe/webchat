@@ -41,6 +41,12 @@ export default function CallNotifications({ client, user }: Props) {
   const keyRef = useRef("");
 
   useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(""), 6000);
+    return () => clearTimeout(timer);
+  }, [message]);
+
+  useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
     let alive = true;
     void Promise.all([
@@ -61,13 +67,13 @@ export default function CallNotifications({ client, user }: Props) {
   async function toggle() {
     if (busy) return;
     setMessage("");
-    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-      setMessage("Este navegador não permite avisos de chamadas.");
-      return;
-    }
     if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !window.matchMedia("(display-mode: standalone)").matches &&
         !(navigator as Navigator & { standalone?: boolean }).standalone) {
       setMessage("No iPhone, adicione o nosso bloco à Tela de Início para receber chamadas.");
+      return;
+    }
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      setMessage("Este navegador não permite avisos de chamadas.");
       return;
     }
     if (!enabled && !keyRef.current) {
@@ -114,6 +120,6 @@ export default function CallNotifications({ client, user }: Props) {
         <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 9h18c0-1-3-2-3-9ZM10 21h4" />
       </svg>
     </button>
-    {message && <div className="call-alert-message" role="status" onClick={() => setMessage("")}>{message}</div>}
+    {message && <div className="call-alert-message" role="status">{message}</div>}
   </>;
 }

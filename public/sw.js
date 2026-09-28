@@ -8,6 +8,14 @@ self.addEventListener("push", (event) => {
     if (payload.type === "end") {
       const notifications = await self.registration.getNotifications({ tag });
       notifications.forEach((notification) => notification.close());
+      // WebKit exige que cada push em segundo plano resulte em aviso visível.
+      await self.registration.showNotification("Ligação encerrada", {
+        body: "A chamada terminou.",
+        icon: "/icon",
+        tag,
+        silent: true,
+        data: { url: typeof payload.roomId === "string" ? `/?call=${encodeURIComponent(payload.roomId)}` : "/" },
+      });
       return;
     }
     if (payload.type !== "call" || typeof payload.roomId !== "string") return;

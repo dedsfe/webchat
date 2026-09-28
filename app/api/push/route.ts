@@ -30,8 +30,8 @@ export async function PUT(request: Request) {
     const url = new URL(endpoint);
     if (url.protocol !== "https:" || url.username || url.password) return json({ error: "Endpoint inválido" }, 400);
   } catch { return json({ error: "Endpoint inválido" }, 400); }
-  const { error } = await config.admin.from("call_push_subscriptions").upsert({
-    endpoint, user_id: user.id, p256dh, auth, updated_at: new Date().toISOString(),
+  const { error } = await config.databaseFor(request).rpc("call_push_subscription", {
+    p_secret: config.secret, p_endpoint: endpoint, p_p256dh: p256dh, p_auth: auth, p_remove: false,
   });
   return error ? json({ error: "Não foi possível ativar as notificações" }, 500) : json({ ok: true });
 }
@@ -43,6 +43,8 @@ export async function DELETE(request: Request) {
   if (!user) return json({ error: "Sessão inválida" }, 401);
   const body = await request.json().catch(() => null) as { endpoint?: unknown } | null;
   if (typeof body?.endpoint !== "string") return json({ error: "Endpoint inválido" }, 400);
-  const { error } = await config.admin.from("call_push_subscriptions").delete().eq("endpoint", body.endpoint).eq("user_id", user.id);
+  const { error } = await config.databaseFor(request).rpc("call_push_subscription", {
+    p_secret: config.secret, p_endpoint: body.endpoint, p_p256dh: "", p_auth: "", p_remove: true,
+  });
   return error ? json({ error: "Não foi possível desativar as notificações" }, 500) : json({ ok: true });
 }

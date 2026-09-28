@@ -11,3 +11,9 @@ Se o projeto antigo não estiver acessível, é possível usar um projeto novo s
 5. Publique o frontend. Entre nas duas contas, reivindique a sala antiga pelo código dela em uma das contas e use o novo convite para a segunda. Salas novas também comportam duas contas.
 
 As mensagens antigas ficam no banco. O código antigo serve apenas para a primeira reivindicação; depois disso, entrar com ele não concede acesso. O convite novo é um UUID separado do ID da sala e deixa de aceitar novas pessoas quando há dois membros.
+
+## Avisos de chamadas
+
+A migração `20260928000000_call_push.sql` cria inscrições Web Push privadas e funções restritas para registrar e encerrar avisos. Depois de aplicá-la, gere um segredo aleatório para `PUSH_SERVER_SECRET`, grave o mesmo valor em `private.call_push_config` e configure a variável no servidor. Configure também `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` no servidor. Nenhuma dessas variáveis deve ter prefixo `NEXT_PUBLIC_`; só a chave VAPID pública é exposta pela rota `/api/push`.
+
+Cada pessoa ativa os avisos pelo sino na sala. No iPhone, é preciso adicionar o site à Tela de Início e permitir notificações no app instalado. O navegador e o sistema controlam o som do aviso push; o toque contínuo só funciona enquanto a página está aberta e o navegador permite áudio.

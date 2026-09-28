@@ -4,6 +4,7 @@ node_modules/
 tsconfig.tsbuildinfo
 .DS_Store
 .vercel
+supabase/.temp/
 
 .env*
 !.env.local.example

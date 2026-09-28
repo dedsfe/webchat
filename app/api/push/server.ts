@@ -4,15 +4,19 @@ import webpush from "web-push";
 export function serverConfig() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const service = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const secret = process.env.PUSH_SERVER_SECRET;
   const publicKey = process.env.VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   const subject = process.env.VAPID_SUBJECT;
-  if (!url || !anon || !service || !publicKey || !privateKey || !subject) return null;
+  if (!url || !anon || !secret || !publicKey || !privateKey || !subject) return null;
   webpush.setVapidDetails(subject, publicKey, privateKey);
   return {
     publicKey,
-    admin: createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } }),
+    secret,
+    databaseFor: (request: Request) => createClient(url, anon, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: request.headers.get("authorization") || "" } },
+    }),
     auth: createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } }),
   };
 }
