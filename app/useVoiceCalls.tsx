@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient, User } from "@supabase/supabase-js";
 
 type Signal = {
-  kind: "invite" | "answer" | "candidate" | "end" | "reject" | "busy" | "screen" | "restart" | "restart-answer" | "taken";
+  kind: "invite" | "answer" | "candidate" | "end" | "reject" | "busy" | "screen" | "restart" | "restart-answer" | "restart-request" | "taken";
   id: string;
   from: string;
   to: string;
@@ -14,10 +14,11 @@ type Signal = {
   candidate?: RTCIceCandidateInit;
   sharing?: boolean;
   peerDevice?: string;
+  seq?: number;
 };
 
 type CallView = {
-  stage: "incoming" | "calling" | "connecting" | "active";
+  stage: "incoming" | "calling" | "connecting" | "active" | "reconnecting";
   name: string;
   room: string;
   muted: boolean;
@@ -48,11 +49,14 @@ type Session = {
   processingAnswer?: boolean;
   offerer?: boolean;
   restarting?: boolean;
+  restartSeq?: number;
+  lastRestartAt?: number;
+  recoverLoop?: ReturnType<typeof setInterval>;
   recoverTimer?: ReturnType<typeof setTimeout>;
   pushStart?: Promise<void>;
 };
 
-const iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+const fallbackIceServers: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] }];
 
 // Opus em estéreo e no teto de qualidade (510 kbps). Aplicado na descrição remota,
 // que é o que define como o nosso lado codifica o áudio que envia.
@@ -128,7 +132,10 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
   const ringingRef = useRef<{ context: AudioContext; timer: ReturnType<typeof setInterval> } | null>(null);
   const startingRef = useRef(false);
   const deviceRef = useRef("");
+  const iceRef = useRef<{ servers: RTCIceServer[]; expires: number } | null>(null);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
   const handlerRef = useRef<(room: string, signal: Signal) => void>(() => {});
+  const networkRef = useRef<() => void>(() => {});
 
   const attachAudio = useCallback((node: HTMLAudioElement | null) => {
     audioRef.current = node;
@@ -221,6 +228,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       if (session.inviteTimer) clearInterval(session.inviteTimer);
       if (session.answerTimer) clearInterval(session.answerTimer);
       if (session.recoverTimer) clearTimeout(session.recoverTimer);
+      if (session.recoverLoop) clearInterval(session.recoverLoop);
       session.peer?.close();
       session.stream?.getTracks().forEach((track) => track.stop());
       session.screenStream?.getTracks().forEach((track) => track.stop());
@@ -234,6 +242,8 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     sharingPendingRef.current = false;
     remoteStreamRef.current = null;
     document.title = "nosso bloco";
+    void wakeLockRef.current?.release().catch(() => {});
+    wakeLockRef.current = null;
     setView(null);
     setNeedsPlay(false);
     if (message) showNotice(message);
@@ -297,6 +307,13 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, user?.id, roomId, roomTitle]);
 
+  // Trocou de rede (Wi-Fi caiu e voltou, trocou de rede): refaz a rota na hora em vez de esperar o timeout do ICE.
+  useEffect(() => {
+    const onOnline = () => networkRef.current();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, []);
+
   useEffect(() => {
     if (!view?.startedAt) return;
     const timer = window.setInterval(() => setSeconds((current) => current + 1), 1000);
@@ -318,8 +335,40 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     }
   }
 
-  function makePeer(session: Session, offerer = false): RTCPeerConnection {
-    const peer = new RTCPeerConnection({ iceServers });
+  // TURN retransmite a mídia quando a conexão direta não passa (4G, rede de empresa, NAT chato).
+  async function loadIceServers(): Promise<RTCIceServer[]> {
+    if (iceRef.current && iceRef.current.expires > Date.now()) return iceRef.current.servers;
+    try {
+      const { data } = await client!.auth.getSession();
+      if (!data.session) return fallbackIceServers;
+      const controller = new AbortController();
+      const abort = setTimeout(() => controller.abort(), 3000);
+      const response = await fetch("/api/turn", { method: "POST", headers: { Authorization: `Bearer ${data.session.access_token}` }, signal: controller.signal });
+      clearTimeout(abort);
+      const body = await response.json() as { iceServers?: RTCIceServer[] };
+      if (!response.ok || !body.iceServers?.length) return fallbackIceServers;
+      iceRef.current = { servers: body.iceServers, expires: Date.now() + 3600_000 };
+      return body.iceServers;
+    } catch { return fallbackIceServers; }
+  }
+
+  function keepAwake() {
+    if (wakeLockRef.current || document.hidden) return;
+    const wakeLock = (navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } }).wakeLock;
+    void wakeLock?.request("screen").then((lock) => {
+      if (sessionRef.current) wakeLockRef.current = lock;
+      else void lock.release();
+    }).catch(() => {});
+  }
+
+  function recover(session: Session) {
+    if (sessionRef.current !== session) return;
+    if (session.offerer) void restartIce(session);
+    else void send(session.roomId, { kind: "restart-request", id: session.id, to: session.target });
+  }
+
+  function makePeer(session: Session, iceServers: RTCIceServer[], offerer = false): RTCPeerConnection {
+    const peer = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 2 });
     session.peer = peer;
     session.offerer = offerer;
     // Reserva vídeo na oferta para permitir compartilhar a tela sem renegociar a chamada.
@@ -362,19 +411,27 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
         if (session.timer) clearTimeout(session.timer);
         if (session.answerTimer) clearInterval(session.answerTimer);
         if (session.recoverTimer) clearTimeout(session.recoverTimer);
+        if (session.recoverLoop) clearInterval(session.recoverLoop);
         session.recoverTimer = undefined;
+        session.recoverLoop = undefined;
         session.restarting = false;
+        keepAwake();
         const mic = session.stream?.getAudioTracks()[0];
         void tuneSender(peer.getSenders().find((sender) => sender.track && sender.track === mic), { maxBitrate: 64000, priority: "high", networkPriority: "high" });
         setView((current) => current ? { ...current, stage: "active", startedAt: current.startedAt || Date.now() } : current);
       } else if ((peer.connectionState === "disconnected" || peer.connectionState === "failed") && peer.remoteDescription) {
         // Rede engasgou (comum ao ligar a tela): tenta reconectar antes de derrubar a ligação.
+        // Os dois lados insistem: quem ligou refaz o ICE, quem atendeu pede para refazer.
         if (!session.recoverTimer) {
+          setView((current) => current?.stage === "active" ? { ...current, stage: "reconnecting" } : current);
           session.recoverTimer = setTimeout(() => {
             if (sessionRef.current === session && peer.connectionState !== "connected") stopSession(true, "A ligação caiu. Tente novamente.");
-          }, 20000);
+          }, 60000);
+          session.recoverLoop = setInterval(() => {
+            if (peer.connectionState !== "connected") recover(session);
+          }, 4000);
         }
-        if (peer.connectionState === "failed" && session.offerer) void restartIce(session);
+        if (peer.connectionState === "failed") recover(session);
       }
     };
     return peer;
@@ -382,13 +439,19 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
 
   async function restartIce(session: Session) {
     const peer = session.peer;
-    if (!peer || session.restarting || sessionRef.current !== session) return;
+    if (!peer || session.restarting || sessionRef.current !== session || peer.signalingState === "closed") return;
+    // Dá tempo de cada tentativa conectar (relay TURN leva alguns segundos) antes de refazer.
+    if (session.lastRestartAt && Date.now() - session.lastRestartAt < 8000) return;
+    session.lastRestartAt = Date.now();
     session.restarting = true;
+    const seq = (session.restartSeq || 0) + 1;
+    session.restartSeq = seq;
     try {
       const offer = await peer.createOffer({ iceRestart: true });
       await peer.setLocalDescription(offer);
-      await send(session.roomId, { kind: "restart", id: session.id, to: session.target, sdp: peer.localDescription?.toJSON() });
-    } catch { session.restarting = false; }
+      await send(session.roomId, { kind: "restart", id: session.id, to: session.target, seq, sdp: peer.localDescription?.toJSON() });
+    } catch { /* a próxima volta do laço tenta de novo */ }
+    finally { session.restarting = false; }
   }
 
   function armTimeout(session: Session) {
@@ -425,9 +488,10 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       sessionRef.current = session;
       setView({ stage: "calling", name: other.display_name, room: roomTitle || roomsRef.current.get(roomId) || "Sala", muted: false });
       try {
-        session.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+        const [stream, servers] = await Promise.all([navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }), loadIceServers()]);
+        session.stream = stream;
         if (sessionRef.current !== session) { session.stream.getTracks().forEach((track) => track.stop()); return; }
-        const peer = makePeer(session, true);
+        const peer = makePeer(session, servers, true);
         session.stream.getTracks().forEach((track) => peer.addTrack(track, session.stream!));
         // Canal de áudio reservado para o som da tela, depois do microfone para manter a ordem das linhas.
         session.screenAudioSender = peer.addTransceiver("audio", { direction: "sendrecv" }).sender;
@@ -459,9 +523,10 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     }
     setView((current) => current ? { ...current, stage: "connecting" } : current);
     try {
-      session.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+      const [stream, servers] = await Promise.all([navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }), loadIceServers()]);
+      session.stream = stream;
       if (sessionRef.current !== session) { session.stream.getTracks().forEach((track) => track.stop()); return; }
-      const peer = makePeer(session);
+      const peer = makePeer(session, servers);
       session.stream.getTracks().forEach((track) => peer.addTrack(track, session.stream!));
       await peer.setRemoteDescription(hifiOpus(session.offer));
       const screenTransceiver = peer.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === "video");
@@ -506,6 +571,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       sessionRef.current = session;
       setView({ stage: "incoming", name: signal.name || "Alguém", room: roomsRef.current.get(room) || "Sala", muted: false });
       startRinging();
+      void loadIceServers();
       armTimeout(session);
       if (document.hidden) document.title = "Ligação recebida · nosso bloco";
       return;
@@ -541,17 +607,23 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
         await session.peer.setRemoteDescription(hifiOpus(signal.sdp));
         const answer = await session.peer.createAnswer();
         await session.peer.setLocalDescription(answer);
-        await send(room, { kind: "restart-answer", id: session.id, to: session.target, sdp: session.peer.localDescription?.toJSON() });
+        await send(room, { kind: "restart-answer", id: session.id, to: session.target, seq: signal.seq, sdp: session.peer.localDescription?.toJSON() });
       } catch { /* a espera de reconexão encerra se não voltar */ }
-    } else if (signal.kind === "restart-answer" && signal.sdp?.type === "answer" && session.peer?.signalingState === "have-local-offer") {
+    } else if (signal.kind === "restart-answer" && signal.sdp?.type === "answer" && signal.seq === session.restartSeq && session.peer?.signalingState === "have-local-offer") {
+      // Só vale a resposta da tentativa mais recente; respostas atrasadas seriam de ICE velho.
       try { await session.peer.setRemoteDescription(hifiOpus(signal.sdp)); } catch { /* idem */ }
-      finally { session.restarting = false; }
+    } else if (signal.kind === "restart-request" && session.offerer && session.peer?.remoteDescription) {
+      void restartIce(session);
     } else if (signal.kind === "screen") {
       setView((current) => current ? { ...current, remoteSharingScreen: !!signal.sharing } : current);
     }
   }
 
   handlerRef.current = (room, signal) => { void onSignal(room, signal); };
+  networkRef.current = () => {
+    const session = sessionRef.current;
+    if (session?.peer?.remoteDescription) recover(session);
+  };
 
   function rejectCall() {
     const session = sessionRef.current;
@@ -639,7 +711,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
           <span className="voice-room">{view.room}</span>
           <div className="voice-mark"><PhoneIcon /></div>
           <h2>{view.name}</h2>
-          <p aria-live="polite">{view.stage === "incoming" ? "Ligação de voz recebida" : view.stage === "calling" ? "Chamando..." : view.stage === "connecting" ? "Conectando..." : elapsed(view.startedAt)}</p>
+          <p aria-live="polite">{view.stage === "incoming" ? "Ligação de voz recebida" : view.stage === "calling" ? "Chamando..." : view.stage === "connecting" ? "Conectando..." : view.stage === "reconnecting" ? "Reconectando..." : elapsed(view.startedAt)}</p>
           {(view.remoteSharingScreen || view.sharingScreen) && <div className="voice-screens">
             {view.remoteSharingScreen && <figure className="voice-screen"><video ref={attachRemoteScreen} autoPlay playsInline muted /><figcaption>Tela de {view.name}</figcaption></figure>}
             {view.sharingScreen && <figure className="voice-screen"><video ref={attachLocalScreen} autoPlay playsInline muted /><figcaption>Sua tela</figcaption></figure>}
