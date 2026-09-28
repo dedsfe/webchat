@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const user = await authenticatedUser(request, config.auth);
   if (!user) return json({ error: "Sessão inválida" }, 401);
   const body = await request.json().catch(() => null) as { event?: unknown; callId?: unknown; roomId?: unknown } | null;
-  if ((body?.event !== "start" && body?.event !== "end") || typeof body.callId !== "string" || !uuid.test(body.callId) ||
+  if ((body?.event !== "start" && body?.event !== "answer" && body?.event !== "end") || typeof body.callId !== "string" || !uuid.test(body.callId) ||
       typeof body.roomId !== "string" || body.roomId.length > 128) return json({ error: "Chamada inválida" }, 400);
 
   const rpc = body.event === "start" ? "call_push_start" : "call_push_end";
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   await Promise.all((subscriptions || []).map(async (subscription) => {
     const payload = body.event === "start"
       ? { type: "call", callId: body.callId, roomId: body.roomId, name: subscription.caller_name }
-      : { type: "end", callId: body.callId, roomId: body.roomId };
+      : { type: body.event === "answer" ? "answered" : "end", callId: body.callId, roomId: body.roomId };
     try {
       await webpush.sendNotification({ endpoint: subscription.endpoint, keys: {
         p256dh: subscription.p256dh, auth: subscription.auth_key,

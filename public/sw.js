@@ -5,12 +5,14 @@ self.addEventListener("push", (event) => {
   if (!payload || typeof payload.callId !== "string") return;
   const tag = `call-${payload.callId}`;
   event.waitUntil((async () => {
-    if (payload.type === "end") {
+    if (payload.type === "end" || payload.type === "answered") {
       const notifications = await self.registration.getNotifications({ tag });
       notifications.forEach((notification) => notification.close());
+      const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      if (windows.some((client) => client.visibilityState === "visible")) return;
       // WebKit exige que cada push em segundo plano resulte em aviso visível.
-      await self.registration.showNotification("Ligação encerrada", {
-        body: "A chamada terminou.",
+      await self.registration.showNotification(payload.type === "answered" ? "Chamada atendida" : "Ligação encerrada", {
+        body: payload.type === "answered" ? "A chamada foi atendida em outro aparelho." : "A chamada terminou.",
         icon: "/icon",
         tag,
         silent: true,

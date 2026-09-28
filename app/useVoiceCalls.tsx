@@ -246,7 +246,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     });
   }
 
-  async function callAlert(session: Session, event: "start" | "end") {
+  async function callAlert(session: Session, event: "start" | "answer" | "end") {
     if (!client) return;
     try {
       const { data } = await client.auth.getSession();
@@ -476,7 +476,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       await peer.setLocalDescription(answer);
       const sent = await send(session.roomId, { kind: "answer", id: session.id, to: session.target, sdp: peer.localDescription?.toJSON() });
       if (!sent) throw new Error("signal");
-      void endCallAlert(session);
+      void callAlert(session, "answer");
       session.answerTimer = setInterval(() => {
         if (sessionRef.current !== session || peer.connectionState === "connected") return;
         void send(session.roomId, { kind: "answer", id: session.id, to: session.target, sdp: peer.localDescription?.toJSON() });
