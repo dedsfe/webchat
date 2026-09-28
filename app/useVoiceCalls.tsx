@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient, User } from "@supabase/supabase-js";
 
 type Signal = {
-  kind: "invite" | "answer" | "candidate" | "end" | "reject" | "busy" | "screen" | "restart" | "restart-answer";
+  kind: "invite" | "answer" | "candidate" | "end" | "reject" | "busy" | "screen" | "restart" | "restart-answer" | "taken";
   id: string;
   from: string;
   to: string;
@@ -13,6 +13,7 @@ type Signal = {
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
   sharing?: boolean;
+  peerDevice?: string;
 };
 
 type CallView = {
@@ -29,6 +30,9 @@ type Session = {
   id: string;
   roomId: string;
   target: string;
+  // Aparelho do outro lado. Com o app aberto em mais de um lugar (aba + PWA, celular),
+  // sinais de outro aparelho da mesma pessoa não podem mexer nesta ligação.
+  targetDevice?: string;
   offer?: RTCSessionDescriptionInit;
   peer?: RTCPeerConnection;
   stream?: MediaStream;
@@ -498,7 +502,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
         void send(room, { kind: "busy", id: signal.id, to: signal.from });
         return;
       }
-      const session: Session = { id: signal.id, roomId: room, target: signal.from, offer: signal.sdp, pendingIce: [], outgoingIce: [], canSendIce: false };
+      const session: Session = { id: signal.id, roomId: room, target: signal.from, targetDevice: signal.device, offer: signal.sdp, pendingIce: [], outgoingIce: [], canSendIce: false };
       sessionRef.current = session;
       setView({ stage: "incoming", name: signal.name || "Alguém", room: roomsRef.current.get(room) || "Sala", muted: false });
       startRinging();
@@ -508,15 +512,23 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     }
     const session = sessionRef.current;
     if (!session || session.id !== signal.id || session.roomId !== room || session.target !== signal.from) return;
+    if (signal.kind === "taken") {
+      // Outro aparelho meu atendeu: este para de tocar sem avisar ninguém.
+      if (signal.peerDevice !== deviceRef.current) stopSession(false);
+      return;
+    }
+    if (session.targetDevice && signal.device !== session.targetDevice) return;
     if (signal.kind === "candidate" && signal.candidate) {
       if (!session.peer?.remoteDescription) session.pendingIce.push(signal.candidate);
       else try { await session.peer.addIceCandidate(signal.candidate); } catch { /* conexão encerrada */ }
     } else if (signal.kind === "answer" && signal.sdp?.type === "answer" && session.peer && !session.peer.remoteDescription && !session.processingAnswer) {
       session.processingAnswer = true;
+      session.targetDevice = signal.device;
       try {
         if (session.inviteTimer) clearInterval(session.inviteTimer);
         await session.peer.setRemoteDescription(hifiOpus(signal.sdp));
         await addPendingIce(session);
+        void send(room, { kind: "taken", id: session.id, to: session.target, peerDevice: signal.device });
         setView((current) => current ? { ...current, stage: "connecting" } : current);
       } catch { stopSession(true, "Não foi possível conectar a ligação."); }
       finally { session.processingAnswer = false; }
