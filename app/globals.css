@@ -286,6 +286,34 @@ body::-webkit-scrollbar,
   color: #203c2a;
   box-shadow: 0 16px 40px rgba(7, 27, 14, 0.22);
 }
+.voice-sheet-screen {
+  width: min(100%, 920px);
+  max-height: 100%;
+  overflow-y: auto;
+}
+.voice-sheet-screen .voice-mark { margin-top: 12px; }
+.voice-screens {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 16px;
+  width: 100%;
+  margin-top: 20px;
+}
+.voice-screen { min-width: 0; margin: 0; }
+.voice-screen video {
+  display: block;
+  width: 100%;
+  max-height: min(48vh, 480px);
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #203c2a;
+}
+.voice-screen figcaption {
+  margin-top: 7px;
+  color: #54705c;
+  font-size: 13px;
+}
 .voice-room {
   max-width: 100%;
   overflow: hidden;
@@ -321,10 +349,10 @@ body::-webkit-scrollbar,
 .voice-actions {
   display: flex;
   justify-content: center;
-  gap: 54px;
+  gap: clamp(12px, 5vw, 42px);
   width: 100%;
   margin-top: auto;
-  padding-top: 52px;
+  padding-top: 32px;
 }
 .voice-action {
   display: flex;
@@ -383,6 +411,11 @@ body::-webkit-scrollbar,
   font-size: 14px;
   text-align: center;
   transform: translateX(-50%);
+}
+@media (max-width: 360px) {
+  .voice-backdrop { padding-left: 16px; padding-right: 16px; }
+  .voice-sheet { padding-left: 20px; padding-right: 20px; }
+  .voice-actions { gap: 12px; }
 }
 
 /* Área de Mensagens */

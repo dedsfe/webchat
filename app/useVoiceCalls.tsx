@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient, User } from "@supabase/supabase-js";
 
 type Signal = {
-  kind: "invite" | "answer" | "candidate" | "end" | "reject" | "busy";
+  kind: "invite" | "answer" | "candidate" | "end" | "reject" | "busy" | "screen";
   id: string;
   from: string;
   to: string;
@@ -12,6 +12,7 @@ type Signal = {
   name?: string;
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
+  sharing?: boolean;
 };
 
 type CallView = {
@@ -19,6 +20,8 @@ type CallView = {
   name: string;
   room: string;
   muted: boolean;
+  sharingScreen?: boolean;
+  remoteSharingScreen?: boolean;
   startedAt?: number;
 };
 
@@ -29,6 +32,8 @@ type Session = {
   offer?: RTCSessionDescriptionInit;
   peer?: RTCPeerConnection;
   stream?: MediaStream;
+  screenStream?: MediaStream;
+  screenSender?: RTCRtpSender;
   pendingIce: RTCIceCandidateInit[];
   outgoingIce: RTCIceCandidateInit[];
   canSendIce: boolean;
@@ -59,6 +64,10 @@ function MicIcon({ muted }: { muted: boolean }) {
   );
 }
 
+function ScreenIcon() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2" /><path d="M8 21h8m-4-3v3" /></svg>;
+}
+
 function elapsed(startedAt?: number): string {
   if (!startedAt) return "00:00";
   const seconds = Math.floor((Date.now() - startedAt) / 1000);
@@ -75,6 +84,10 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
   const roomsRef = useRef(new Map<string, string>());
   const sessionRef = useRef<Session | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const localScreenRef = useRef<HTMLVideoElement | null>(null);
+  const remoteScreenRef = useRef<HTMLVideoElement | null>(null);
+  const remoteScreenStreamRef = useRef<MediaStream | null>(null);
+  const sharingPendingRef = useRef(false);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const ringingRef = useRef<{ context: AudioContext; timer: ReturnType<typeof setInterval> } | null>(null);
   const startingRef = useRef(false);
@@ -86,6 +99,22 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     if (node && remoteStreamRef.current && node.srcObject !== remoteStreamRef.current) {
       node.srcObject = remoteStreamRef.current;
       void node.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true));
+    }
+  }, []);
+
+  const attachLocalScreen = useCallback((node: HTMLVideoElement | null) => {
+    localScreenRef.current = node;
+    if (node) {
+      node.srcObject = sessionRef.current?.screenStream || null;
+      if (node.srcObject) void node.play().catch(() => {});
+    }
+  }, []);
+
+  const attachRemoteScreen = useCallback((node: HTMLVideoElement | null) => {
+    remoteScreenRef.current = node;
+    if (node) {
+      node.srcObject = remoteScreenStreamRef.current;
+      if (node.srcObject) void node.play().catch(() => {});
     }
   }, []);
 
@@ -146,8 +175,13 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       if (session.answerTimer) clearInterval(session.answerTimer);
       session.peer?.close();
       session.stream?.getTracks().forEach((track) => track.stop());
+      session.screenStream?.getTracks().forEach((track) => track.stop());
     }
     if (audioRef.current) audioRef.current.srcObject = null;
+    if (localScreenRef.current) localScreenRef.current.srcObject = null;
+    if (remoteScreenRef.current) remoteScreenRef.current.srcObject = null;
+    remoteScreenStreamRef.current = null;
+    sharingPendingRef.current = false;
     remoteStreamRef.current = null;
     document.title = "nosso bloco";
     setView(null);
@@ -216,9 +250,11 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     }
   }
 
-  function makePeer(session: Session): RTCPeerConnection {
+  function makePeer(session: Session, offerer = false): RTCPeerConnection {
     const peer = new RTCPeerConnection({ iceServers });
     session.peer = peer;
+    // Reserva vídeo na oferta para permitir compartilhar a tela sem renegociar a chamada.
+    if (offerer) session.screenSender = peer.addTransceiver("video", { direction: "sendrecv" }).sender;
     peer.onicecandidate = ({ candidate }) => {
       if (!candidate || sessionRef.current !== session) return;
       const ice = candidate.toJSON();
@@ -226,6 +262,15 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       if (session.canSendIce) void send(session.roomId, { kind: "candidate", id: session.id, to: session.target, candidate: ice });
     };
     peer.ontrack = ({ streams, track }) => {
+      if (track.kind === "video") {
+        remoteScreenStreamRef.current = new MediaStream([track]);
+        const video = remoteScreenRef.current;
+        if (video) {
+          video.srcObject = remoteScreenStreamRef.current;
+          void video.play().catch(() => {});
+        }
+        return;
+      }
       remoteStreamRef.current = streams[0] || new MediaStream([track]);
       const audio = audioRef.current;
       if (!audio) return;
@@ -281,7 +326,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       try {
         session.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
         if (sessionRef.current !== session) { session.stream.getTracks().forEach((track) => track.stop()); return; }
-        const peer = makePeer(session);
+        const peer = makePeer(session, true);
         session.stream.getTracks().forEach((track) => peer.addTrack(track, session.stream!));
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
@@ -315,6 +360,11 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       const peer = makePeer(session);
       session.stream.getTracks().forEach((track) => peer.addTrack(track, session.stream!));
       await peer.setRemoteDescription(session.offer);
+      const screenTransceiver = peer.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === "video");
+      if (screenTransceiver) {
+        screenTransceiver.direction = "sendrecv";
+        session.screenSender = screenTransceiver.sender;
+      }
       await addPendingIce(session);
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
@@ -367,6 +417,8 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       stopSession(false, signal.kind === "busy" ? "A outra pessoa está em outra ligação." : "Ligação recusada.");
     } else if (signal.kind === "end") {
       stopSession(false, "Ligação encerrada.");
+    } else if (signal.kind === "screen") {
+      setView((current) => current ? { ...current, remoteSharingScreen: !!signal.sharing } : current);
     }
   }
 
@@ -388,15 +440,60 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     setView((current) => current ? { ...current, muted: !track.enabled } : current);
   }
 
+  async function stopScreenShare(session: Session) {
+    if (sessionRef.current !== session || !session.screenStream) return;
+    const stream = session.screenStream;
+    session.screenStream = undefined;
+    try { await session.screenSender?.replaceTrack(null); } catch { /* chamada pode ter encerrado */ }
+    stream.getTracks().forEach((track) => track.stop());
+    if (localScreenRef.current) localScreenRef.current.srcObject = null;
+    if (sessionRef.current !== session) return;
+    setView((current) => current ? { ...current, sharingScreen: false } : current);
+    void send(session.roomId, { kind: "screen", id: session.id, to: session.target, sharing: false });
+  }
+
+  async function toggleScreenShare() {
+    const session = sessionRef.current;
+    if (!session?.peer || sharingPendingRef.current) return;
+    if (session.screenStream) { await stopScreenShare(session); return; }
+    if (!session.screenSender || !navigator.mediaDevices?.getDisplayMedia) {
+      showNotice("Este navegador não permite compartilhar a tela.");
+      return;
+    }
+    sharingPendingRef.current = true;
+    let stream: MediaStream | undefined;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const track = stream.getVideoTracks()[0];
+      if (!track || sessionRef.current !== session || session.peer.connectionState !== "connected") {
+        stream.getTracks().forEach((item) => item.stop());
+        return;
+      }
+      await session.screenSender.replaceTrack(track);
+      if (sessionRef.current !== session) { stream.getTracks().forEach((item) => item.stop()); return; }
+      session.screenStream = stream;
+      track.onended = () => { void stopScreenShare(session); };
+      setView((current) => current ? { ...current, sharingScreen: true } : current);
+      void send(session.roomId, { kind: "screen", id: session.id, to: session.target, sharing: true });
+    } catch (error) {
+      stream?.getTracks().forEach((track) => track.stop());
+      if (!(error instanceof DOMException && error.name === "NotAllowedError")) showNotice("Não foi possível compartilhar a tela.");
+    } finally { sharingPendingRef.current = false; }
+  }
+
   const callUi = (
     <>
       <audio ref={attachAudio} autoPlay playsInline className="voice-remote-audio" />
       {view && <div className="voice-backdrop" role="presentation">
-        <section className="voice-sheet" role="dialog" aria-modal="true" aria-label="Ligação de voz">
+        <section className={`voice-sheet ${view.sharingScreen || view.remoteSharingScreen ? "voice-sheet-screen" : ""}`} role="dialog" aria-modal="true" aria-label="Ligação">
           <span className="voice-room">{view.room}</span>
           <div className="voice-mark"><PhoneIcon /></div>
           <h2>{view.name}</h2>
           <p aria-live="polite">{view.stage === "incoming" ? "Ligação de voz recebida" : view.stage === "calling" ? "Chamando..." : view.stage === "connecting" ? "Conectando..." : elapsed(view.startedAt)}</p>
+          {(view.remoteSharingScreen || view.sharingScreen) && <div className="voice-screens">
+            {view.remoteSharingScreen && <figure className="voice-screen"><video ref={attachRemoteScreen} autoPlay playsInline muted /><figcaption>Tela de {view.name}</figcaption></figure>}
+            {view.sharingScreen && <figure className="voice-screen"><video ref={attachLocalScreen} autoPlay playsInline muted /><figcaption>Sua tela</figcaption></figure>}
+          </div>}
           {needsPlay && <button type="button" className="voice-sound" onClick={() => { void audioRef.current?.play().then(() => setNeedsPlay(false)); }}>Ativar som</button>}
           <div className="voice-actions">
             {view.stage === "incoming" ? <>
@@ -404,6 +501,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
               <button type="button" className="voice-action voice-accept" onClick={() => void acceptCall()}><PhoneIcon /><span>Atender</span></button>
             </> : <>
               <button type="button" className={`voice-action voice-mute ${view.muted ? "is-muted" : ""}`} onClick={toggleMute} disabled={!sessionRef.current?.stream}><MicIcon muted={view.muted} /><span>{view.muted ? "Ativar mic" : "Silenciar"}</span></button>
+              <button type="button" className={`voice-action voice-share ${view.sharingScreen ? "is-sharing" : ""}`} onClick={() => void toggleScreenShare()} disabled={view.stage !== "active"}><ScreenIcon /><span>{view.sharingScreen ? "Parar tela" : "Compartilhar tela"}</span></button>
               <button type="button" className="voice-action voice-decline" onClick={() => stopSession(true)}><PhoneIcon crossed /><span>Encerrar</span></button>
             </>}
           </div>
