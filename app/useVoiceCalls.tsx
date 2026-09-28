@@ -34,6 +34,7 @@ type Session = {
   stream?: MediaStream;
   screenStream?: MediaStream;
   screenSender?: RTCRtpSender;
+  screenAudioSender?: RTCRtpSender;
   pendingIce: RTCIceCandidateInit[];
   outgoingIce: RTCIceCandidateInit[];
   canSendIce: boolean;
@@ -48,6 +49,31 @@ type Session = {
 };
 
 const iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+
+// Opus em estéreo e no teto de qualidade (510 kbps). Aplicado na descrição remota,
+// que é o que define como o nosso lado codifica o áudio que envia.
+function hifiOpus(description: RTCSessionDescriptionInit): RTCSessionDescriptionInit {
+  if (!description.sdp) return description;
+  let sdp = description.sdp;
+  for (const [, payload] of sdp.matchAll(/a=rtpmap:(\d+) opus\/48000/gi)) {
+    sdp = sdp.replace(new RegExp(`(a=fmtp:${payload} )([^\\r\\n]*)`, "g"), (_, head: string, params: string) => {
+      const kept = params.split(";").map((item) => item.trim()).filter((item) => item && !/^(stereo|sprop-stereo|maxaveragebitrate|usedtx)=/.test(item));
+      return head + [...kept, "stereo=1", "sprop-stereo=1", "maxaveragebitrate=510000", "usedtx=0"].join(";");
+    });
+  }
+  return { type: description.type, sdp };
+}
+
+async function tuneSender(sender: RTCRtpSender | undefined, encoding: RTCRtpEncodingParameters & { priority?: string; networkPriority?: string }, degradation?: RTCDegradationPreference) {
+  if (!sender) return;
+  try {
+    const params = sender.getParameters();
+    if (!params.encodings?.length) params.encodings = [{}];
+    Object.assign(params.encodings[0], encoding);
+    if (degradation) params.degradationPreference = degradation;
+    await sender.setParameters(params);
+  } catch { /* navegador sem suporte a esses parâmetros */ }
+}
 
 function PhoneIcon({ crossed = false }: { crossed?: boolean }) {
   return (
@@ -91,6 +117,8 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
   const localScreenRef = useRef<HTMLVideoElement | null>(null);
   const remoteScreenRef = useRef<HTMLVideoElement | null>(null);
   const remoteScreenStreamRef = useRef<MediaStream | null>(null);
+  const screenAudioRef = useRef<HTMLAudioElement | null>(null);
+  const remoteScreenAudioRef = useRef<MediaStream | null>(null);
   const sharingPendingRef = useRef(false);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const ringingRef = useRef<{ context: AudioContext; timer: ReturnType<typeof setInterval> } | null>(null);
@@ -103,6 +131,14 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     if (node && remoteStreamRef.current && node.srcObject !== remoteStreamRef.current) {
       node.srcObject = remoteStreamRef.current;
       void node.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true));
+    }
+  }, []);
+
+  const attachScreenAudio = useCallback((node: HTMLAudioElement | null) => {
+    screenAudioRef.current = node;
+    if (node && remoteScreenAudioRef.current && node.srcObject !== remoteScreenAudioRef.current) {
+      node.srcObject = remoteScreenAudioRef.current;
+      void node.play().catch(() => setNeedsPlay(true));
     }
   }, []);
 
@@ -189,6 +225,8 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     if (localScreenRef.current) localScreenRef.current.srcObject = null;
     if (remoteScreenRef.current) remoteScreenRef.current.srcObject = null;
     remoteScreenStreamRef.current = null;
+    if (screenAudioRef.current) screenAudioRef.current.srcObject = null;
+    remoteScreenAudioRef.current = null;
     sharingPendingRef.current = false;
     remoteStreamRef.current = null;
     document.title = "nosso bloco";
@@ -298,7 +336,17 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
         }
         return;
       }
-      remoteStreamRef.current = streams[0] || new MediaStream([track]);
+      // O microfone vai com stream (addTrack); o som da tela vai no canal reservado, sem stream.
+      if (!streams.length) {
+        remoteScreenAudioRef.current = new MediaStream([track]);
+        const screenAudio = screenAudioRef.current;
+        if (screenAudio) {
+          screenAudio.srcObject = remoteScreenAudioRef.current;
+          void screenAudio.play().catch(() => setNeedsPlay(true));
+        }
+        return;
+      }
+      remoteStreamRef.current = streams[0];
       const audio = audioRef.current;
       if (!audio) return;
       audio.srcObject = remoteStreamRef.current;
@@ -312,6 +360,8 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
         if (session.recoverTimer) clearTimeout(session.recoverTimer);
         session.recoverTimer = undefined;
         session.restarting = false;
+        const mic = session.stream?.getAudioTracks()[0];
+        void tuneSender(peer.getSenders().find((sender) => sender.track && sender.track === mic), { maxBitrate: 64000, priority: "high", networkPriority: "high" });
         setView((current) => current ? { ...current, stage: "active", startedAt: current.startedAt || Date.now() } : current);
       } else if ((peer.connectionState === "disconnected" || peer.connectionState === "failed") && peer.remoteDescription) {
         // Rede engasgou (comum ao ligar a tela): tenta reconectar antes de derrubar a ligação.
@@ -335,18 +385,6 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       await peer.setLocalDescription(offer);
       await send(session.roomId, { kind: "restart", id: session.id, to: session.target, sdp: peer.localDescription?.toJSON() });
     } catch { session.restarting = false; }
-  }
-
-  // Limita a tela para não lotar a rede, priorizando 30 fps em vez de resolução.
-  async function tuneScreenSender(sender: RTCRtpSender) {
-    try {
-      const params = sender.getParameters();
-      if (!params.encodings?.length) params.encodings = [{}];
-      params.encodings[0].maxBitrate = 2_500_000;
-      params.encodings[0].maxFramerate = 30;
-      (params as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = "maintain-framerate";
-      await sender.setParameters(params);
-    } catch { /* navegador sem suporte a esses parâmetros */ }
   }
 
   function armTimeout(session: Session) {
@@ -387,6 +425,8 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
         if (sessionRef.current !== session) { session.stream.getTracks().forEach((track) => track.stop()); return; }
         const peer = makePeer(session, true);
         session.stream.getTracks().forEach((track) => peer.addTrack(track, session.stream!));
+        // Canal de áudio reservado para o som da tela, depois do microfone para manter a ordem das linhas.
+        session.screenAudioSender = peer.addTransceiver("audio", { direction: "sendrecv" }).sender;
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
         const sent = await send(roomId, { kind: "invite", id: session.id, to: session.target, name: (user.user_metadata?.display_name as string | undefined) || "Alguém", sdp: peer.localDescription?.toJSON() });
@@ -419,11 +459,17 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       if (sessionRef.current !== session) { session.stream.getTracks().forEach((track) => track.stop()); return; }
       const peer = makePeer(session);
       session.stream.getTracks().forEach((track) => peer.addTrack(track, session.stream!));
-      await peer.setRemoteDescription(session.offer);
+      await peer.setRemoteDescription(hifiOpus(session.offer));
       const screenTransceiver = peer.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === "video");
       if (screenTransceiver) {
         screenTransceiver.direction = "sendrecv";
         session.screenSender = screenTransceiver.sender;
+      }
+      const mic = session.stream.getAudioTracks()[0];
+      const screenAudioTransceiver = peer.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === "audio" && transceiver.sender.track !== mic);
+      if (screenAudioTransceiver) {
+        screenAudioTransceiver.direction = "sendrecv";
+        session.screenAudioSender = screenAudioTransceiver.sender;
       }
       await addPendingIce(session);
       const answer = await peer.createAnswer();
@@ -469,7 +515,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       session.processingAnswer = true;
       try {
         if (session.inviteTimer) clearInterval(session.inviteTimer);
-        await session.peer.setRemoteDescription(signal.sdp);
+        await session.peer.setRemoteDescription(hifiOpus(signal.sdp));
         await addPendingIce(session);
         setView((current) => current ? { ...current, stage: "connecting" } : current);
       } catch { stopSession(true, "Não foi possível conectar a ligação."); }
@@ -480,13 +526,13 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       stopSession(false, "Ligação encerrada.");
     } else if (signal.kind === "restart" && signal.sdp?.type === "offer" && session.peer) {
       try {
-        await session.peer.setRemoteDescription(signal.sdp);
+        await session.peer.setRemoteDescription(hifiOpus(signal.sdp));
         const answer = await session.peer.createAnswer();
         await session.peer.setLocalDescription(answer);
         await send(room, { kind: "restart-answer", id: session.id, to: session.target, sdp: session.peer.localDescription?.toJSON() });
       } catch { /* a espera de reconexão encerra se não voltar */ }
     } else if (signal.kind === "restart-answer" && signal.sdp?.type === "answer" && session.peer?.signalingState === "have-local-offer") {
-      try { await session.peer.setRemoteDescription(signal.sdp); } catch { /* idem */ }
+      try { await session.peer.setRemoteDescription(hifiOpus(signal.sdp)); } catch { /* idem */ }
       finally { session.restarting = false; }
     } else if (signal.kind === "screen") {
       setView((current) => current ? { ...current, remoteSharingScreen: !!signal.sharing } : current);
@@ -516,7 +562,10 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     if (sessionRef.current !== session || !session.screenStream) return;
     const stream = session.screenStream;
     session.screenStream = undefined;
-    try { await session.screenSender?.replaceTrack(null); } catch { /* chamada pode ter encerrado */ }
+    try {
+      await session.screenSender?.replaceTrack(null);
+      await session.screenAudioSender?.replaceTrack(null);
+    } catch { /* chamada pode ter encerrado */ }
     stream.getTracks().forEach((track) => track.stop());
     if (localScreenRef.current) localScreenRef.current.srcObject = null;
     if (sessionRef.current !== session) return;
@@ -535,15 +584,29 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     sharingPendingRef.current = true;
     let stream: MediaStream | undefined;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 }, width: { max: 1920 }, height: { max: 1080 } }, audio: false });
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30, max: 30 }, width: { max: 1920 }, height: { max: 1080 } },
+        // Som da aba cru: sem cancelamento de eco, redução de ruído ou ganho automático, em estéreo 48 kHz.
+        audio: session.screenAudioSender ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2, sampleRate: 48000 } : false,
+        systemAudio: "include",
+        surfaceSwitching: "include",
+      } as DisplayMediaStreamOptions);
       const track = stream.getVideoTracks()[0];
+      const audioTrack = stream.getAudioTracks()[0];
       if (track) track.contentHint = "motion";
+      if (audioTrack) audioTrack.contentHint = "music";
       if (!track || sessionRef.current !== session || session.peer.connectionState !== "connected") {
         stream.getTracks().forEach((item) => item.stop());
         return;
       }
       await session.screenSender.replaceTrack(track);
-      await tuneScreenSender(session.screenSender);
+      await tuneSender(session.screenSender, { maxBitrate: 2_500_000, maxFramerate: 30 }, "maintain-framerate");
+      if (audioTrack && session.screenAudioSender) {
+        await session.screenAudioSender.replaceTrack(audioTrack);
+        await tuneSender(session.screenAudioSender, { maxBitrate: 510000, priority: "high", networkPriority: "high" });
+      } else if (session.screenAudioSender) {
+        showNotice("Sem som: para enviar o áudio, escolha uma aba e marque “Compartilhar áudio da aba”.");
+      }
       if (sessionRef.current !== session) { stream.getTracks().forEach((item) => item.stop()); return; }
       session.screenStream = stream;
       track.onended = () => { void stopScreenShare(session); };
@@ -558,6 +621,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
   const callUi = (
     <>
       <audio ref={attachAudio} autoPlay playsInline className="voice-remote-audio" />
+      <audio ref={attachScreenAudio} autoPlay playsInline className="voice-remote-audio" />
       {view && <div className="voice-backdrop" role="presentation">
         <section className={`voice-sheet ${view.sharingScreen || view.remoteSharingScreen ? "voice-sheet-screen" : ""}`} role="dialog" aria-modal="true" aria-label="Ligação">
           <span className="voice-room">{view.room}</span>
@@ -568,7 +632,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
             {view.remoteSharingScreen && <figure className="voice-screen"><video ref={attachRemoteScreen} autoPlay playsInline muted /><figcaption>Tela de {view.name}</figcaption></figure>}
             {view.sharingScreen && <figure className="voice-screen"><video ref={attachLocalScreen} autoPlay playsInline muted /><figcaption>Sua tela</figcaption></figure>}
           </div>}
-          {needsPlay && <button type="button" className="voice-sound" onClick={() => { void audioRef.current?.play().then(() => setNeedsPlay(false)); }}>Ativar som</button>}
+          {needsPlay && <button type="button" className="voice-sound" onClick={() => { void Promise.all([audioRef.current?.play(), remoteScreenAudioRef.current ? screenAudioRef.current?.play() : undefined]).then(() => setNeedsPlay(false)).catch(() => {}); }}>Ativar som</button>}
           <div className="voice-actions">
             {view.stage === "incoming" ? <>
               <button type="button" className="voice-action voice-decline" onClick={rejectCall}><PhoneIcon crossed /><span>Recusar</span></button>
