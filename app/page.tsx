@@ -5,6 +5,7 @@ import { createClient, type SupabaseClient, type User } from "@supabase/supabase
 import AccessGate, { type ChatRoom } from "./AccessGate";
 import GymPanel from "./GymPanel";
 import { useVoiceCalls } from "./useVoiceCalls";
+import CallNotifications, { removeCallPushSubscription } from "./CallNotifications";
 import { parseGymContent, type GymCheckin, type GymContent } from "./gym";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -911,8 +912,9 @@ export default function Home() {
 
   useEffect(() => {
     if (!client || !user || activeRoom || inviteCode || recoveryMode) return;
-    if (new URLSearchParams(window.location.search).has("r")) return;
-    const saved = localStorage.getItem(`active-room-${user.id}`);
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("r")) return;
+    const saved = params.get("call") || localStorage.getItem(`active-room-${user.id}`);
     if (!saved) return;
     let cancelled = false;
     void Promise.all([
@@ -1552,7 +1554,7 @@ export default function Home() {
         localStorage.setItem(`active-room-${user!.id}`, room.id);
         window.history.replaceState(null, "", window.location.pathname);
       }}
-      onSignOut={() => { void client.auth.signOut(); sairDaSala(); }}
+      onSignOut={() => { void removeCallPushSubscription(client).finally(() => void client.auth.signOut()); sairDaSala(); }}
     />{user && !recoveryMode && callUi}</>;
   }
 
@@ -1622,6 +1624,7 @@ export default function Home() {
               <path d="M5.2 3.8 8.4 3l2.2 4.2-2 2.1c1.2 2.5 3.2 4.4 5.8 5.8l2.1-2 4.2 2.2-.8 3.2c-.3 1.1-1.4 1.8-2.5 1.7C10.1 19.4 4.6 13.9 3.5 6.3c-.1-1.1.6-2.2 1.7-2.5Z" />
             </svg>
           </button>
+          <CallNotifications client={client} user={user} />
           <button
             type="button"
             className={`btn-header-acao ${buscaAtiva ? "ativo" : ""}`}

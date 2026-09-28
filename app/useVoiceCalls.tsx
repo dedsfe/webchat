@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { RealtimeChannel, SupabaseClient, User } from "@supabase/supabase-js";
 
 type Signal = {
-  kind: "invite" | "answer" | "candidate" | "end" | "reject" | "busy" | "screen";
+  kind: "invite" | "answer" | "candidate" | "end" | "reject" | "busy" | "screen" | "restart" | "restart-answer";
   id: string;
   from: string;
   to: string;
@@ -41,6 +41,10 @@ type Session = {
   inviteTimer?: ReturnType<typeof setInterval>;
   answerTimer?: ReturnType<typeof setInterval>;
   processingAnswer?: boolean;
+  offerer?: boolean;
+  restarting?: boolean;
+  recoverTimer?: ReturnType<typeof setTimeout>;
+  pushStart?: Promise<void>;
 };
 
 const iceServers: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
@@ -146,6 +150,8 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       const context = new AudioContext();
       const beep = () => {
         if (context.state !== "running") return;
+        if (document.hidden) document.title = "Ligação recebida · nosso bloco";
+        if ("vibrate" in navigator) navigator.vibrate([260, 140, 260]);
         for (const offset of [0, 0.25]) {
           const oscillator = context.createOscillator();
           const gain = context.createGain();
@@ -170,9 +176,11 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     sessionRef.current = null;
     if (session) {
       if (tellOther) void send(session.roomId, { kind: "end", id: session.id, to: session.target });
+      if (tellOther) void endCallAlert(session);
       if (session.timer) clearTimeout(session.timer);
       if (session.inviteTimer) clearInterval(session.inviteTimer);
       if (session.answerTimer) clearInterval(session.answerTimer);
+      if (session.recoverTimer) clearTimeout(session.recoverTimer);
       session.peer?.close();
       session.stream?.getTracks().forEach((track) => track.stop());
       session.screenStream?.getTracks().forEach((track) => track.stop());
@@ -198,6 +206,24 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       if (status === "SUBSCRIBED") readyRef.current.add(id);
       else readyRef.current.delete(id);
     });
+  }
+
+  async function callAlert(session: Session, event: "start" | "end") {
+    if (!client) return;
+    try {
+      const { data } = await client.auth.getSession();
+      if (!data.session) return;
+      await fetch("/api/call-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session.access_token}` },
+        body: JSON.stringify({ event, callId: session.id, roomId: session.roomId }),
+      });
+    } catch { /* a chamada por WebRTC continua mesmo se o push falhar */ }
+  }
+
+  async function endCallAlert(session: Session) {
+    await session.pushStart;
+    await callAlert(session, "end");
   }
 
   useEffect(() => {
@@ -253,6 +279,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
   function makePeer(session: Session, offerer = false): RTCPeerConnection {
     const peer = new RTCPeerConnection({ iceServers });
     session.peer = peer;
+    session.offerer = offerer;
     // Reserva vídeo na oferta para permitir compartilhar a tela sem renegociar a chamada.
     if (offerer) session.screenSender = peer.addTransceiver("video", { direction: "sendrecv" }).sender;
     peer.onicecandidate = ({ candidate }) => {
@@ -282,12 +309,44 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       if (peer.connectionState === "connected") {
         if (session.timer) clearTimeout(session.timer);
         if (session.answerTimer) clearInterval(session.answerTimer);
+        if (session.recoverTimer) clearTimeout(session.recoverTimer);
+        session.recoverTimer = undefined;
+        session.restarting = false;
         setView((current) => current ? { ...current, stage: "active", startedAt: current.startedAt || Date.now() } : current);
-      } else if (peer.connectionState === "failed") {
-        stopSession(true, "A ligação caiu. Tente novamente.");
+      } else if ((peer.connectionState === "disconnected" || peer.connectionState === "failed") && peer.remoteDescription) {
+        // Rede engasgou (comum ao ligar a tela): tenta reconectar antes de derrubar a ligação.
+        if (!session.recoverTimer) {
+          session.recoverTimer = setTimeout(() => {
+            if (sessionRef.current === session && peer.connectionState !== "connected") stopSession(true, "A ligação caiu. Tente novamente.");
+          }, 20000);
+        }
+        if (peer.connectionState === "failed" && session.offerer) void restartIce(session);
       }
     };
     return peer;
+  }
+
+  async function restartIce(session: Session) {
+    const peer = session.peer;
+    if (!peer || session.restarting || sessionRef.current !== session) return;
+    session.restarting = true;
+    try {
+      const offer = await peer.createOffer({ iceRestart: true });
+      await peer.setLocalDescription(offer);
+      await send(session.roomId, { kind: "restart", id: session.id, to: session.target, sdp: peer.localDescription?.toJSON() });
+    } catch { session.restarting = false; }
+  }
+
+  // Limita a tela para não lotar a rede, priorizando 30 fps em vez de resolução.
+  async function tuneScreenSender(sender: RTCRtpSender) {
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings?.length) params.encodings = [{}];
+      params.encodings[0].maxBitrate = 2_500_000;
+      params.encodings[0].maxFramerate = 30;
+      (params as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = "maintain-framerate";
+      await sender.setParameters(params);
+    } catch { /* navegador sem suporte a esses parâmetros */ }
   }
 
   function armTimeout(session: Session) {
@@ -332,6 +391,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
         await peer.setLocalDescription(offer);
         const sent = await send(roomId, { kind: "invite", id: session.id, to: session.target, name: (user.user_metadata?.display_name as string | undefined) || "Alguém", sdp: peer.localDescription?.toJSON() });
         if (!sent) throw new Error("signal");
+        session.pushStart = callAlert(session, "start");
         session.inviteTimer = setInterval(() => {
           if (sessionRef.current !== session || session.peer?.remoteDescription) return;
           void send(roomId, { kind: "invite", id: session.id, to: session.target, name: (user.user_metadata?.display_name as string | undefined) || "Alguém", sdp: peer.localDescription?.toJSON() });
@@ -370,6 +430,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       await peer.setLocalDescription(answer);
       const sent = await send(session.roomId, { kind: "answer", id: session.id, to: session.target, sdp: peer.localDescription?.toJSON() });
       if (!sent) throw new Error("signal");
+      void endCallAlert(session);
       session.answerTimer = setInterval(() => {
         if (sessionRef.current !== session || peer.connectionState === "connected") return;
         void send(session.roomId, { kind: "answer", id: session.id, to: session.target, sdp: peer.localDescription?.toJSON() });
@@ -417,6 +478,16 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
       stopSession(false, signal.kind === "busy" ? "A outra pessoa está em outra ligação." : "Ligação recusada.");
     } else if (signal.kind === "end") {
       stopSession(false, "Ligação encerrada.");
+    } else if (signal.kind === "restart" && signal.sdp?.type === "offer" && session.peer) {
+      try {
+        await session.peer.setRemoteDescription(signal.sdp);
+        const answer = await session.peer.createAnswer();
+        await session.peer.setLocalDescription(answer);
+        await send(room, { kind: "restart-answer", id: session.id, to: session.target, sdp: session.peer.localDescription?.toJSON() });
+      } catch { /* a espera de reconexão encerra se não voltar */ }
+    } else if (signal.kind === "restart-answer" && signal.sdp?.type === "answer" && session.peer?.signalingState === "have-local-offer") {
+      try { await session.peer.setRemoteDescription(signal.sdp); } catch { /* idem */ }
+      finally { session.restarting = false; }
     } else if (signal.kind === "screen") {
       setView((current) => current ? { ...current, remoteSharingScreen: !!signal.sharing } : current);
     }
@@ -428,6 +499,7 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     const session = sessionRef.current;
     if (!session) return;
     void send(session.roomId, { kind: "reject", id: session.id, to: session.target });
+    void endCallAlert(session);
     stopSession(false);
   }
 
@@ -463,13 +535,15 @@ export function useVoiceCalls(client: SupabaseClient | null, user: User | null, 
     sharingPendingRef.current = true;
     let stream: MediaStream | undefined;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { ideal: 30, max: 30 }, width: { max: 1920 }, height: { max: 1080 } }, audio: false });
       const track = stream.getVideoTracks()[0];
+      if (track) track.contentHint = "motion";
       if (!track || sessionRef.current !== session || session.peer.connectionState !== "connected") {
         stream.getTracks().forEach((item) => item.stop());
         return;
       }
       await session.screenSender.replaceTrack(track);
+      await tuneScreenSender(session.screenSender);
       if (sessionRef.current !== session) { stream.getTracks().forEach((item) => item.stop()); return; }
       session.screenStream = stream;
       track.onended = () => { void stopScreenShare(session); };

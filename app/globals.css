@@ -263,6 +263,21 @@ body::-webkit-scrollbar,
 .btn-header-call:focus-visible {
   background: rgba(52, 111, 73, 0.2);
 }
+.call-alert-toggle.is-enabled { color: #285d3b; }
+.call-alert-message {
+  position: fixed;
+  top: max(72px, calc(env(safe-area-inset-top) + 56px));
+  right: 16px;
+  z-index: 1100;
+  max-width: min(320px, calc(100vw - 32px));
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: #203c2a;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 3px 12px rgba(18, 36, 25, .16);
+}
 
 .voice-remote-audio { display: none; }
 .voice-backdrop {
